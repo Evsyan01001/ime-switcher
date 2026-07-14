@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "com.apple.Terminal": "com.apple.keylayout.ABC",
+    "com.googlecode.iterm2": "com.apple.keylayout.ABC",
+    "com.microsoft.VSCode": "com.apple.keylayout.ABC",
+    "com.apple.dt.Xcode": "com.apple.keylayout.ABC",
+    "com.tencent.xinWeChat": "com.apple.inputmethod.SCIM.ITABC"
+  },
+  "defaultInputSource": null
+}

@@ -1,0 +1,6 @@
+# 编译产物
+ime-switcher
+list_input_sources
+
+# macOS
+.DS_Store
