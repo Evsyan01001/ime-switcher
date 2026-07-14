@@ -91,7 +91,11 @@ func selectableInputSources() -> [(id: String, name: String)] {
     }
     var results: [(String, String)] = []
     for source in list {
-        // 只列出可选择的输入法
+        // 只列出键盘输入法（排除 Emoji & Symbols、听写等）
+        guard let catPtr = TISGetInputSourceProperty(source, kTISPropertyInputSourceCategory) else { continue }
+        let category = Unmanaged<CFString>.fromOpaque(catPtr).takeUnretainedValue() as String
+        guard category == kTISCategoryKeyboardInputSource as String else { continue }
+
         var selectable = false
         if let selPtr = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsSelectCapable) {
             selectable = Unmanaged<CFBoolean>.fromOpaque(selPtr).takeUnretainedValue() == kCFBooleanTrue
