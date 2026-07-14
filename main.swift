@@ -65,7 +65,13 @@ func selectInputSource(id: String) {
 // MARK: - 主逻辑:监听前台应用变化
 
 let config = loadConfig()
-var lastSwitchedID: String? = nil
+
+/// 获取当前实际选中的输入法 ID
+func currentInputSourceID() -> String? {
+    guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else { return nil }
+    guard let ptr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return nil }
+    return Unmanaged<CFString>.fromOpaque(ptr).takeUnretainedValue() as String
+}
 
 func handleAppActivation(_ app: NSRunningApplication) {
     guard let bundleID = app.bundleIdentifier else { return }
@@ -80,10 +86,14 @@ func handleAppActivation(_ app: NSRunningApplication) {
     }
 
     guard let targetID = target else { return }
-    if targetID == lastSwitchedID { return } // 避免重复切换同一个输入法
+
+    // 查询当前实际输入法，避免手动切换后误跳过
+    if targetID == currentInputSourceID() {
+        print("⏭️ 当前已是 \(targetID)，跳过切换")
+        return
+    }
 
     selectInputSource(id: targetID)
-    lastSwitchedID = targetID
 }
 
 let center = NSWorkspace.shared.notificationCenter
