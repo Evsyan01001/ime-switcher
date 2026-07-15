@@ -2,6 +2,11 @@ import Cocoa
 
 setbuf(stdout, nil)
 
+// MARK: - 版本
+
+/// 当前版本号（语义化版本，与 git tag 保持一致）
+let appVersion = "v1.1"
+
 // MARK: - 启动
 
 let app = NSApplication.shared
@@ -25,5 +30,5 @@ if let frontApp = NSWorkspace.shared.frontmostApplication {
     handleAppActivation(frontApp)
 }
 
-print("🚀 ime-switcher 已启动,正在监听应用切换...")
+print("🚀 ime-switcher \(appVersion) 已启动,正在监听应用切换...")
 app.run()
