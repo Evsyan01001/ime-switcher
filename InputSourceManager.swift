@@ -1,4 +1,5 @@
 import Carbon
+import Foundation
 
 // MARK: - 输入法查询与切换 (Carbon TIS API)
 
@@ -18,17 +19,35 @@ func findInputSource(withID id: String) -> TISInputSource? {
     return nil
 }
 
-/// 切换到指定输入法
+/// 切换到指定输入法（内置验证重试，确保 CJKV 输入法可靠生效）
 func selectInputSource(id: String) {
     guard let source = findInputSource(withID: id) else {
         print("⚠️ 找不到输入法: \(id)")
         return
     }
+
     let result = TISSelectInputSource(source)
-    if result == noErr {
-        print("✅ 已切换到: \(id)")
-    } else {
+    if result != noErr {
         print("⚠️ 切换失败,错误码 \(result)")
+        return
+    }
+
+    print("✅ 已切换到: \(id)")
+
+    // ── 验证重试: CJKV 输入法可能延迟生效 ──
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [id] in
+        guard currentInputSourceID() != id else { return }
+
+        print("⏳ 补充切换: \(id)")
+        if let retrySource = findInputSource(withID: id) {
+            TISSelectInputSource(retrySource)
+            // 二次验证日志
+            if currentInputSourceID() == id {
+                print("✅ 补充切换生效: \(id)")
+            } else {
+                print("⚠️ 补充切换仍未生效: \(id)")
+            }
+        }
     }
 }
 
