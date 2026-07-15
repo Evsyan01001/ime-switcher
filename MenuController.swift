@@ -61,6 +61,22 @@ class MenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // ── 注释模式开关 ──
+        if let app = NSWorkspace.shared.frontmostApplication,
+           let bundleID = app.bundleIdentifier,
+           let appName = app.localizedName {
+
+            let isOn = (config.hashTriggerApps ?? []).contains(bundleID)
+            let hashItem = NSMenuItem(
+                title: "💬 注释模式：\(appName)",
+                action: #selector(toggleHashTrigger),
+                keyEquivalent: ""
+            )
+            hashItem.target = self
+            hashItem.state = isOn ? .on : .off
+            menu.addItem(hashItem)
+        }
+
         // ── 忘记当前 App 的记忆 ──
         if AppKeyboardCache.shared.hasCacheForFrontmostApp {
             let forgetItem = NSMenuItem(
@@ -108,6 +124,21 @@ class MenuController: NSObject, NSMenuDelegate {
     @objc private func forgetAppPreference() {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
         AppKeyboardCache.shared.remove(bundleID: bundleID)
+    }
+
+    @objc private func toggleHashTrigger() {
+        guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
+
+        var apps = config.hashTriggerApps ?? []
+        if let idx = apps.firstIndex(of: bundleID) {
+            apps.remove(at: idx)
+            print("💬 注释模式已关闭：\(bundleID)")
+        } else {
+            apps.append(bundleID)
+            print("💬 注释模式已开启：\(bundleID)")
+        }
+        config.hashTriggerApps = apps
+        saveConfig(config)
     }
 
     @objc private func editConfig() {
