@@ -6,5 +6,10 @@
     "com.apple.dt.Xcode": "com.apple.keylayout.ABC",
     "com.tencent.xinWeChat": "com.apple.inputmethod.SCIM.ITABC"
   },
-  "defaultInputSource": null
+  "defaultInputSource": null,
+  "hashTriggerApps": [
+    "com.microsoft.VSCode",
+    "com.apple.Terminal",
+    "com.googlecode.iterm2"
+  ]
 }

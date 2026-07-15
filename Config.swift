@@ -5,6 +5,8 @@ import Foundation
 struct Config: Codable {
     var rules: [String: String]
     var defaultInputSource: String?
+    /// 在哪些 App 里 `#` 触发切换到拼音（写中文注释用）
+    var hashTriggerApps: [String]? = nil
 }
 
 func configPath() -> String {
