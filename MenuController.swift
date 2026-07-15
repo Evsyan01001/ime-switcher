@@ -61,6 +61,18 @@ class MenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // ── 忘记当前 App 的记忆 ──
+        if AppKeyboardCache.shared.hasCacheForFrontmostApp {
+            let forgetItem = NSMenuItem(
+                title: "忘记这个 App 的偏好",
+                action: #selector(forgetAppPreference),
+                keyEquivalent: ""
+            )
+            forgetItem.target = self
+            menu.addItem(forgetItem)
+            menu.addItem(.separator())
+        }
+
         // ── 重新加载配置 ──
         let reloadItem = NSMenuItem(title: "重新加载配置", action: #selector(reloadConfigAction), keyEquivalent: "")
         reloadItem.target = self
@@ -91,6 +103,11 @@ class MenuController: NSObject, NSMenuDelegate {
     @objc private func reloadConfigAction() {
         config = loadConfig()
         print("🔄 配置已重新加载")
+    }
+
+    @objc private func forgetAppPreference() {
+        guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
+        AppKeyboardCache.shared.remove(bundleID: bundleID)
     }
 
     @objc private func editConfig() {

@@ -5,6 +5,15 @@ import Cocoa
 func handleAppActivation(_ app: NSRunningApplication) {
     guard let bundleID = app.bundleIdentifier else { return }
 
+    // 1. 记忆缓存优先（用户手动选择 > 配置规则）
+    if let cachedID = AppKeyboardCache.shared.inputSource(for: bundleID) {
+        if cachedID != currentInputSourceID() {
+            selectInputSource(id: cachedID)
+        }
+        return
+    }
+
+    // 2. 配置规则兜底
     let target: String?
     if let ruleTarget = config.rules[bundleID] {
         target = ruleTarget

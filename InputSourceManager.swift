@@ -26,13 +26,18 @@ func selectInputSource(id: String) {
         return
     }
 
+    // 标记程序化切换，挡掉我们自己的变更通知
+    AppKeyboardCache.isProgrammaticSwitch = true
+
     let result = TISSelectInputSource(source)
     if result != noErr {
         print("⚠️ 切换失败,错误码 \(result)")
+        AppKeyboardCache.isProgrammaticSwitch = false
         return
     }
 
     print("✅ 已切换到: \(id)")
+    AppKeyboardCache.isProgrammaticSwitch = false
 
     // ── 验证重试: CJKV 输入法可能延迟生效 ──
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [id] in
@@ -40,8 +45,9 @@ func selectInputSource(id: String) {
 
         print("⏳ 补充切换: \(id)")
         if let retrySource = findInputSource(withID: id) {
+            AppKeyboardCache.isProgrammaticSwitch = true
             TISSelectInputSource(retrySource)
-            // 二次验证日志
+            AppKeyboardCache.isProgrammaticSwitch = false
             if currentInputSourceID() == id {
                 print("✅ 补充切换生效: \(id)")
             } else {
