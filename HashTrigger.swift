@@ -86,13 +86,14 @@ final class HashTrigger {
             return
         }
 
-        // 用实际字符判断 `#`（兼容各键盘布局）
+        // 用实际字符判断触发键（兼容各键盘布局）
+        let triggerChar = config.hashTriggerKey ?? "#"
         guard let nsEvent = NSEvent(cgEvent: event),
-              nsEvent.characters == "#",
+              nsEvent.characters == triggerChar,
               !isInCommentMode else { return }
 
         isInCommentMode = true
-        print("💬 # 触发注释模式 → 拼音")
+        print("💬 \(triggerChar) 触发注释模式 → 拼音")
         selectInputSource(id: "com.apple.inputmethod.SCIM.ITABC")
     }
 

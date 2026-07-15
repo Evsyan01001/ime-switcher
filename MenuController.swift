@@ -61,20 +61,40 @@ class MenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // ── 注释模式开关 ──
+        // ── 注释模式 ──
         if let app = NSWorkspace.shared.frontmostApplication,
            let bundleID = app.bundleIdentifier,
            let appName = app.localizedName {
 
+            let parentItem = NSMenuItem(title: "💬 注释模式", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+
+            // 触发键显示
+            let triggerKey = config.hashTriggerKey ?? "#"
+            let keyItem = NSMenuItem(title: "触发键: \(triggerKey)", action: nil, keyEquivalent: "")
+            keyItem.isEnabled = false
+            submenu.addItem(keyItem)
+
+            // 自定义触发键
+            let customItem = NSMenuItem(title: "自定义触发键...", action: #selector(customizeTriggerKey), keyEquivalent: "")
+            customItem.target = self
+            submenu.addItem(customItem)
+
+            submenu.addItem(.separator())
+
+            // 当前 App 开关
             let isOn = (config.hashTriggerApps ?? []).contains(bundleID)
-            let hashItem = NSMenuItem(
-                title: "💬 注释模式：\(appName)",
+            let toggleItem = NSMenuItem(
+                title: "注释模式：\(appName)",
                 action: #selector(toggleHashTrigger),
                 keyEquivalent: ""
             )
-            hashItem.target = self
-            hashItem.state = isOn ? .on : .off
-            menu.addItem(hashItem)
+            toggleItem.target = self
+            toggleItem.state = isOn ? .on : .off
+            submenu.addItem(toggleItem)
+
+            menu.setSubmenu(submenu, for: parentItem)
+            menu.addItem(parentItem)
         }
 
         // ── 忘记当前 App 的记忆 ──
@@ -124,6 +144,30 @@ class MenuController: NSObject, NSMenuDelegate {
     @objc private func forgetAppPreference() {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
         AppKeyboardCache.shared.remove(bundleID: bundleID)
+    }
+
+    @objc private func customizeTriggerKey() {
+        let alert = NSAlert()
+        alert.messageText = "自定义触发键"
+        alert.informativeText = "输入一个字符作为注释模式的触发键，按该键后自动切换到拼音。"
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 140, height: 24))
+        textField.stringValue = config.hashTriggerKey ?? "#"
+        textField.placeholderString = "#"
+        textField.maximumNumberOfLines = 1
+        alert.accessoryView = textField
+
+        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: "取消")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard let first = trimmed.first else { return }
+        config.hashTriggerKey = String(first)
+        saveConfig(config)
+        print("🔤 触发键已设为: \(String(first))")
     }
 
     @objc private func toggleHashTrigger() {
