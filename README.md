@@ -40,19 +40,8 @@ xcode-select --install
 git clone https://github.com/Evsyan01001/ime-switcher.git
 cd ime-switcher
 
-# 编译主程序
-swiftc -O \
-  Config.swift \
-  InputSourceManager.swift \
-  AppKeyboardCache.swift \
-  AppSwitcher.swift \
-  MenuController.swift \
-  HashTrigger.swift \
-  main.swift \
-  -o ime-switcher
-
-# 编译辅助工具（查看输入法 ID）
-swiftc -O list_input_sources.swift -o list_input_sources
+# 编译（自动编译主程序 + 辅助工具）
+./build.sh
 ```
 
 ### 第二步：首次运行（自动配置）
@@ -276,6 +265,7 @@ rm ~/Library/LaunchAgents/com.user.ime-switcher.plist
 
 ```
 ime-switcher/
+├── build.sh                   # 编译脚本
 ├── Config.swift              # 配置模型 + JSON 读写
 ├── InputSourceManager.swift  # 输入法查询/切换 (Carbon TIS API)
 ├── AppKeyboardCache.swift    # 输入法记忆（手动切换自动记录）
