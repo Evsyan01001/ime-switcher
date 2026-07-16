@@ -7,7 +7,6 @@
 
     <key>ProgramArguments</key>
     <array>
-        <!-- 下面这行改成你实际的可执行文件绝对路径 -->
         <string>/usr/local/bin/ime-switcher</string>
     </array>
 

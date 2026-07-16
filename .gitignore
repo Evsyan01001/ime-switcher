@@ -4,3 +4,9 @@ list_input_sources
 
 # macOS
 .DS_Store
+
+# Swift Package Manager
+.build/
+DerivedData/
+*.swp
+*.swo

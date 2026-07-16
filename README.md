@@ -40,15 +40,18 @@ xcode-select --install
 git clone https://github.com/Evsyan01001/ime-switcher.git
 cd ime-switcher
 
-# 编译（自动编译主程序 + 辅助工具）
+# 编译（Swift Package Manager）
 ./build.sh
+# 等价于: swift build -c release
 ```
+
+编译产物在 `.build/release/` 下。也可直接 `swift build -c release` 效果一样。
 
 ### 第二步：首次运行（自动配置）
 
 ```bash
 # 启动（菜单栏出现 ⌨ 图标）
-./ime-switcher
+.build/release/ime-switcher
 ```
 
 **首次运行时，程序会自动完成以下配置：**
@@ -219,7 +222,7 @@ vim ~/.config/ime-switcher/config.json
 | 双拼 | `com.apple.inputmethod.SCIM.Shuangpin` |
 | 美式英文 | `com.apple.keylayout.US` |
 
-> 不确定你的输入法 ID？运行 `./list_input_sources` 查看。
+> 不确定你的输入法 ID？运行 `.build/release/list-input-sources` 查看。
 
 ---
 
@@ -236,8 +239,10 @@ vim ~/.config/ime-switcher/config.json
 
 1. 打开 **系统设置 → 隐私与安全性**
 2. 点击 **辅助功能**（或 **输入监控**）
-3. 点击 `+` 添加 `ime-switcher` 可执行文件
+3. 点击 `+` 添加 `.build/release/ime-switcher`
 4. 完全退出程序（`kill`），重新启动
+
+> 如果用 `./build.sh` 重新编译后，二进制路径不变（仍在 `.build/release/`），授权继续有效。
 
 ---
 
@@ -245,10 +250,10 @@ vim ~/.config/ime-switcher/config.json
 
 ```bash
 # 1. 将程序复制到系统路径
-sudo cp ime-switcher /usr/local/bin/ime-switcher
+sudo cp .build/release/ime-switcher /usr/local/bin/ime-switcher
 
 # 2. 安装 LaunchAgent
-cp com.user.ime-switcher.plist ~/Library/LaunchAgents/
+cp Resources/com.user.ime-switcher.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.user.ime-switcher.plist
 ```
 
@@ -267,17 +272,23 @@ rm ~/Library/LaunchAgents/com.user.ime-switcher.plist
 
 ```
 ime-switcher/
-├── build.sh                   # 编译脚本
-├── Config.swift              # 配置模型 + JSON 读写
-├── InputSourceManager.swift  # 输入法查询/切换 (Carbon TIS API)
-├── AppKeyboardCache.swift    # 输入法记忆（手动切换自动记录）
-├── AppSwitcher.swift         # 应用切换主逻辑
-├── MenuController.swift      # 菜单栏图标与交互
-├── HashTrigger.swift         # # 触发拼音 + 注释模式
-├── main.swift                # 入口文件
-├── list_input_sources.swift  # 查看输入法 ID 的辅助工具
-├── config.example.json       # 配置示例
-└── com.user.ime-switcher.plist  # 开机自启配置
+├── Package.swift              # Swift Package Manager 清单
+├── Sources/ime-switcher/      # 主程序源码
+│   ├── main.swift
+│   ├── AppKeyboardCache.swift
+│   ├── AppSwitcher.swift
+│   ├── Config.swift
+│   ├── HashTrigger.swift
+│   ├── InputSourceManager.swift
+│   └── MenuController.swift
+├── Tools/                     # 辅助工具
+│   └── list_input_sources.swift
+├── Resources/                 # 资源文件
+│   ├── config.example.json
+│   └── com.user.ime-switcher.plist
+├── build.sh                   # 编译快捷脚本
+├── README.md
+└── LICENSE
 ```
 
 ---
@@ -296,7 +307,7 @@ ime-switcher/
 ## ❓ 常见问题
 
 **切换没反应？**  
-重新跑 `./list_input_sources` 核对输入法 ID 是否拼写正确。
+重新运行 `swift build -c release && .build/release/list-input-sources` 核对输入法 ID 是否拼写正确。
 
 **注释模式在不需要的应用里也生效？**  
 不会。只在 `hashTriggerApps` 配置列表中的应用生效，默认空列表不触发。
