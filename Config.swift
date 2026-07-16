@@ -9,6 +9,10 @@ struct Config: Codable {
     var hashTriggerApps: [String]? = nil
     /// 触发键，默认 `#`
     var hashTriggerKey: String? = nil
+    /// # 触发模式下切到的中文输入法 ID（默认取自动检测到的中文输入法）
+    var hashTriggerChineseSource: String? = nil
+    /// # 触发模式下 Enter 后切回的英文输入法 ID（默认取自动检测到的英文布局）
+    var hashTriggerEnglishSource: String? = nil
 }
 
 func configPath() -> String {
@@ -82,7 +86,9 @@ func autoCreateConfig() {
         rules: rules,
         defaultInputSource: nil,
         hashTriggerApps: ["com.apple.Terminal", "com.microsoft.VSCode", "com.googlecode.iterm2"],
-        hashTriggerKey: "#"
+        hashTriggerKey: "#",
+        hashTriggerChineseSource: chineseID,
+        hashTriggerEnglishSource: englishID
     )
 
     print("📄 已生成默认配置（\(rules.count) 条规则）")

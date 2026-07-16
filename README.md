@@ -116,7 +116,9 @@ vim ~/.config/ime-switcher/config.json
 | `rules` | Bundle ID → 输入法 ID 映射。切换到该应用时自动使用对应的输入法 |
 | `defaultInputSource` | `rules` 里没配置的应用使用此输入法。`null` 表示不切换 |
 | `hashTriggerKey` | 注释模式的触发键，默认 `#`。可改为 `\``、`;` 等任意字符 |
-| `hashTriggerApps` | 在此列表的 App 中按触发键可自动切到拼音写中文注释 |
+| `hashTriggerApps` | 在此列表的 App 中按触发键可自动切到中文输入法写注释 |
+| `hashTriggerChineseSource` | 注释模式切换到中文输入法 ID。不填则用自动检测到的第一个中文输入法 |
+| `hashTriggerEnglishSource` | 注释模式结束后切回的英文输入法 ID。不填则默认 `ABC` |
 
 ### 第四步：通过菜单栏调整规则
 
@@ -286,9 +288,10 @@ ime-switcher/
 - **真实状态对比** — `currentInputSourceID()` 查询系统实际输入法，不依赖缓存变量
 - **CJKV 验证重试** — 切换后延迟 130ms 验证，未生效则补切一次
 - **输入源过滤** — `kTISCategoryKeyboardInputSource` 排除 Emoji、听写等非键盘输入
-- **手动切换检测** — 监听 `kTISNotifySelectedKeyboardInputSourceChanged`，自动记录 App 偏好
+- **手动切换检测** — 监听 `kTISNotifySelectedKeyboardInputSourceChanged`，用 `lastProgrammaticTargetID` 字符串比对代替布尔标志，消除分布式通知送达时机不确定导致的竞争窗口
 - **菜单栏动态渲染** — `NSMenuDelegate` 每次打开菜单时重建，实时反映当前状态
 - **注释模式** — `CGEventTap` 监听按键，`.listenOnly` 模式不拦截输入；`isInCommentMode` 状态标记，切 App 自动复位
+- **Tap 自动恢复** — CGEventTap 被系统因负载关闭时主动重新启用，防止注释模式静默失效
 
 ## ❓ 常见问题
 

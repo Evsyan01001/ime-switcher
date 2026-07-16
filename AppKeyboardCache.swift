@@ -21,8 +21,12 @@ private func _onInputSourceChanged(
 final class AppKeyboardCache {
     static let shared = AppKeyboardCache()
 
-    /// 标记当前正在程序化切换，用于挡掉我们自己的切换通知
-    static var isProgrammaticSwitch = false
+    /// 记录我们自己最后一次程序化切换的目标输入法 ID。
+    /// 用「通知里的新 ID 是否等于这个值」判断是否是我们自己触发的切换，
+    /// 而不是用一个时刻性的布尔开关 —— 分布式通知的送达时机不确定，
+    /// 布尔开关在「设 true → 调用 API → 设 false」这几行代码执行完之后、
+    /// 通知真正送达之前，存在一个会被误判的竞争窗口。
+    static var lastProgrammaticTargetID: String?
 
     private var cache: [String: String] = [:]
     private let saveURL: URL
@@ -67,10 +71,13 @@ final class AppKeyboardCache {
     // MARK: - 输入法变更处理
 
     fileprivate func handleChange() {
-        guard !Self.isProgrammaticSwitch else { return }
         guard let currentID = currentInputSourceID(),
               let frontApp = NSWorkspace.shared.frontmostApplication,
               let bundleID = frontApp.bundleIdentifier else { return }
+
+        // 是我们自己刚触发的切换（规则匹配 / # 触发拼音 / Enter 切回英文等），
+        // 不当作用户手动切换记录，避免污染记忆缓存
+        if currentID == Self.lastProgrammaticTargetID { return }
 
         if cache[bundleID] != currentID {
             cache[bundleID] = currentID

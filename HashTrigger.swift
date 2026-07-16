@@ -15,9 +15,22 @@ final class HashTrigger {
 
     func start() {
         let eventMask = (1 << CGEventType.keyDown.rawValue)
-        let callback: CGEventTapCallBack = { _, _, event, refcon in
+        let callback: CGEventTapCallBack = { proxy, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let service = Unmanaged<HashTrigger>.fromOpaque(refcon).takeUnretainedValue()
+
+            // 系统在 tap 处理耗时过长/负载高时会关闭 tap，必须主动重新启用，
+            // 否则 # 触发功能会静默失效，只能靠重启程序恢复
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let tap = service.eventTap {
+                    CGEvent.tapEnable(tap: tap, enable: true)
+                    print("♻️ 事件监听被系统暂停，已重新启用")
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
+            guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+
             DispatchQueue.main.async { service.handle(event: event) }
             return Unmanaged.passUnretained(event)
         }
@@ -80,8 +93,9 @@ final class HashTrigger {
         if returnKeyCodes.contains(keyCode) {
             if isInCommentMode {
                 isInCommentMode = false
+                let englishID = config.hashTriggerEnglishSource ?? "com.apple.keylayout.ABC"
                 print("🔤 注释结束，切回英文")
-                selectInputSource(id: "com.apple.keylayout.ABC")
+                selectInputSource(id: englishID)
             }
             return
         }
@@ -93,8 +107,9 @@ final class HashTrigger {
               !isInCommentMode else { return }
 
         isInCommentMode = true
+        let chineseID = config.hashTriggerChineseSource ?? "com.apple.inputmethod.SCIM.ITABC"
         print("💬 \(triggerChar) 触发注释模式 → 拼音")
-        selectInputSource(id: "com.apple.inputmethod.SCIM.ITABC")
+        selectInputSource(id: chineseID)
     }
 
 }
