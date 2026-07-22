@@ -12,5 +12,22 @@
     "com.microsoft.VSCode",
     "com.apple.Terminal",
     "com.googlecode.iterm2"
+  ],
+  "windowRules": [
+    {
+      "bundleID": "com.google.Chrome",
+      "pattern": "zhihu|baidu|bilibili|google\\.(com\\.hk|cn)|weibo|douban",
+      "inputSource": "com.apple.inputmethod.SCIM.ITABC"
+    },
+    {
+      "bundleID": "com.google.Chrome",
+      "pattern": "github|stackoverflow|gitlab|docs\\.google\\.com|developer\\.apple\\.com",
+      "inputSource": "com.apple.keylayout.ABC"
+    },
+    {
+      "bundleID": "com.mitchellh.ghostty",
+      "pattern": "vim|nvim|less|man|bat",
+      "inputSource": "com.apple.inputmethod.SCIM.ITABC"
+    }
   ]
 }

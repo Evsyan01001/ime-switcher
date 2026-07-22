@@ -1,6 +1,8 @@
-# 编译产物
+# 编译产物（二进制文件，完整的 .build/ 已在下方忽略）
 ime-switcher
 list_input_sources
+# 但不忽略源代码目录（否则新增源文件不会被跟踪）
+!/Sources/ime-switcher/
 
 # macOS
 .DS_Store

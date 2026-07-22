@@ -9,7 +9,8 @@
 
 <p align="center">
   <b>macOS 输入法自动切换工具</b><br>
-  根据前台应用自动切换中英文输入法，支持菜单栏一键设置、输入法记忆、<code>#</code> 触发中文注释。
+  根据前台应用自动切换中英文输入法，支持菜单栏一键设置、输入法记忆、<code>#</code> 触发中文注释、<br>
+  <b>窗口级规则</b>（同一应用内按标签页/窗口切换输入法）。
 </p>
 
 ---
@@ -20,6 +21,7 @@
 |------|------|
 | 🔄 **自动切换** | 切换应用时根据规则自动切换输入法 |
 | 🧠 **输入法记忆** | 手动切一次输入法，下次自动恢复你的选择 |
+| 🏢 **窗口级规则** | Chrome/Ghostty 中按标签页 URL 或窗口标题切换输入法 |
 | 🎯 **默认兜底** | 未配置规则的应用可指定默认输入法 |
 | 🖱️ **菜单栏设置** | 点击 ⌨ 图标，一键为当前应用指定输入法 |
 | ✅ **CJKV 可靠切换** | 验证重试机制，确保中日韩越输入法切换不丢 |
@@ -118,6 +120,7 @@ vim ~/.config/ime-switcher/config.json
 |------|------|
 | `rules` | Bundle ID → 输入法 ID 映射。切换到该应用时自动使用对应的输入法 |
 | `defaultInputSource` | `rules` 里没配置的应用使用此输入法。`null` 表示不切换 |
+| `windowRules` | 窗口级规则数组。同一应用内按标签页 URL 或窗口标题切换（支持正则） |
 | `hashTriggerKey` | 注释模式的触发键，默认 `#`。可改为 `\``、`;` 等任意字符 |
 | `hashTriggerApps` | 在此列表的 App 中按触发键可自动切到中文输入法写注释 |
 | `hashTriggerChineseSource` | 注释模式切换到中文输入法 ID。不填则用自动检测到的第一个中文输入法 |
@@ -173,7 +176,49 @@ vim ~/.config/ime-switcher/config.json
 
 > **需要额外权限：** 首次使用注释模式需要授权。见下方「权限说明」。
 
-### 场景四：菜单栏操作（无需编辑配置文件）
+### 场景四：窗口级规则（同一应用内按标签页/窗口切换）
+
+在 Chrome 中按当前标签页的 URL 自动切换输入法；在 Ghostty 终端中按窗口标题自动切换。
+
+支持的应用：
+
+| 应用 | Bundle ID | 匹配内容 | 示例 |
+|------|-----------|---------|------|
+| Chrome | `com.google.Chrome` | 当前标签页 URL | `https://zhihu.com/question/123` |
+| Ghostty | `com.mitchellh.ghostty` | 当前窗口标题 | `vim ~/docs/README.md — ghostty` |
+
+**配置示例：**
+
+```json
+{
+  "windowRules": [
+    {
+      "bundleID": "com.google.Chrome",
+      "pattern": "zhihu|baidu|bilibili|google\\.(com\\.hk|cn)|weibo",
+      "inputSource": "com.apple.inputmethod.SCIM.ITABC"
+    },
+    {
+      "bundleID": "com.google.Chrome",
+      "pattern": "github|stackoverflow|gitlab|docs\\.google\\.com",
+      "inputSource": "com.apple.keylayout.ABC"
+    },
+    {
+      "bundleID": "com.mitchellh.ghostty",
+      "pattern": "vim|nvim|man|less",
+      "inputSource": "com.apple.inputmethod.SCIM.ITABC"
+    }
+  ]
+}
+```
+
+**规则说明：**
+
+- `windowRules` 为数组，从上到下依次匹配，命中即止
+- `pattern` 为正则表达式，匹配 Chrome URL 或终端窗口标题
+- **优先级**：窗口规则 > 手动记忆缓存 > 应用级 `rules` > 全局默认
+- 切换标签页/窗口后**自动检测**并切换，无需手动操作
+
+### 场景五：菜单栏操作（无需编辑配置文件）
 
 不想手写 JSON？直接通过菜单栏操作：
 
@@ -208,6 +253,23 @@ vim ~/.config/ime-switcher/config.json
     "com.microsoft.VSCode",
     "com.apple.Terminal",
     "com.googlecode.iterm2"
+  ],
+  "windowRules": [
+    {
+      "bundleID": "com.google.Chrome",
+      "pattern": "zhihu|baidu|bilibili|google\\.(com\\.hk|cn)",
+      "inputSource": "com.apple.inputmethod.SCIM.ITABC"
+    },
+    {
+      "bundleID": "com.google.Chrome",
+      "pattern": "github|stackoverflow|gitlab|docs\\.google\\.com",
+      "inputSource": "com.apple.keylayout.ABC"
+    },
+    {
+      "bundleID": "com.mitchellh.ghostty",
+      "pattern": "vim|nvim|man|less",
+      "inputSource": "com.apple.inputmethod.SCIM.ITABC"
+    }
   ]
 }
 ```
@@ -280,7 +342,9 @@ ime-switcher/
 │   ├── Config.swift
 │   ├── HashTrigger.swift
 │   ├── InputSourceManager.swift
-│   └── MenuController.swift
+│   ├── MenuController.swift
+│   ├── WindowContextProvider.swift  # 窗口上下文获取（Chrome URL / Ghostty 标题）
+│   └── WindowMonitor.swift          # 窗口变化轮询监控器
 ├── Tools/                     # 辅助工具
 │   └── list_input_sources.swift
 ├── Resources/                 # 资源文件
@@ -303,6 +367,8 @@ ime-switcher/
 - **菜单栏动态渲染** — `NSMenuDelegate` 每次打开菜单时重建，实时反映当前状态
 - **注释模式** — `CGEventTap` 监听按键，`.listenOnly` 模式不拦截输入；`isInCommentMode` 状态标记，切 App 自动复位
 - **Tap 自动恢复** — CGEventTap 被系统因负载关闭时主动重新启用，防止注释模式静默失效
+- **窗口级输入法切换** — 通过 AppleScript（`osascript`）获取 Chrome 标签 URL 和 Ghostty 窗口标题，后台队列 500ms 轮询自动检测变化，正则匹配规则后即时切换
+- **窗口规则优先** — 窗口规则 > 手动记忆 > 应用规则 > 全局默认，确保上下文相关的输入法选择始终优先
 
 ## ❓ 常见问题
 
@@ -316,15 +382,16 @@ ime-switcher/
 不会。`CGEventTap` 使用 `.listenOnly` 模式，只监听不拦截按键。密码框等安全输入场景 macOS 会自动屏蔽。
 
 **能按网站切换输入法吗？**  
-当前只支持按应用粒度。需要浏览器插件或 Accessibility 权限读取窗口标题，属于 v2 方向。
+可以。通过 `windowRules` 为 Chrome 配置 URL 正则匹配规则即可（如 `zhihu|baidu|bilibili` → 中文，`github|stackoverflow` → 英文），无需浏览器插件。
 
 ---
 
-## 🗺️ v2 方向
+## 🗺️ 后续方向
 
-- [ ] 按窗口标题 / 网页 URL 切换
 - [ ] 配置文件热重载
 - [ ] 偏好设置窗口
+- [ ] 更多应用的窗口支持（Safari、iTerm2 等）
+- [ ] 菜单栏直接编辑窗口规则
 
 ---
 

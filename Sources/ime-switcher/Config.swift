@@ -13,6 +13,25 @@ struct Config: Codable {
     var hashTriggerChineseSource: String? = nil
     /// # 触发模式下 Enter 后切回的英文输入法 ID（默认取自动检测到的英文布局）
     var hashTriggerEnglishSource: String? = nil
+    /// 窗口级规则（适用于同一 App 内不同窗口/标签页使用不同输入法）
+    /// - bundleID: 应用标识
+    /// - pattern: 正则表达式，匹配 Chrome URL 或终端窗口标题
+    /// - inputSource: 匹配后切换到的输入法 ID
+    var windowRules: [WindowRule]? = nil
+}
+
+// MARK: - 窗口规则
+
+/// 按窗口上下文（URL/标题）匹配的输入法规则
+///
+/// 优先级：窗口规则 > 键盘记忆 > 应用级规则 > 全局默认
+struct WindowRule: Codable {
+    /// 应用 Bundle ID（如 "com.google.Chrome"、"com.mitchellh.ghostty"）
+    let bundleID: String
+    /// 正则表达式，匹配 Chrome 的标签 URL 或终端的窗口标题
+    let pattern: String
+    /// 匹配后切换到的输入法 ID（如 "com.apple.inputmethod.SCIM.ITABC"）
+    let inputSource: String
 }
 
 func configPath() -> String {
