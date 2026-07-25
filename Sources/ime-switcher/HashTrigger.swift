@@ -45,9 +45,10 @@ final class HashTrigger {
         )
 
         guard let eventTap else {
+            let exePath = Bundle.main.executablePath ?? CommandLine.arguments[0]
             print("⚠️ #触发拼音 需要权限（以下任选其一）")
             print("   1. 系统设置 > 隐私与安全性 > 辅助功能")
-            print("      → 点击 + 添加 `/Volumes/T7/coding/inputSource/ime-switcher`")
+            print("      → 点击 + 添加 `\(exePath)`")
             print("   2. 或 隐私与安全性 > 输入监控（同上）")
             print("   添加后完全退出本程序（kill），再重新启动")
             return

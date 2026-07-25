@@ -66,28 +66,34 @@ final class GhosttyContextProvider: WindowContextProvider {
         return t
     }
 
-    /// 通过 ps 遍历进程树，返回所有子进程的程序名（去重）
+    /// 通过 sysctl 读取内核进程表，遍历进程树返回所有子进程的程序名（去重）。
+    /// 相比每 500ms fork 一次 `ps`，直接读内核开销小得多。
     private func descendantProcessNames(parentPID: pid_t) -> [String] {
-        // 获取全部进程的 PID, PPID, 可执行文件名
-        guard let output = runShellCommand("ps -eo pid=,ppid=,comm= 2>/dev/null") else { return [] }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
+        var size = 0
+        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return [] }
+
+        var procs = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride)
+        guard sysctl(&mib, 4, &procs, &size, nil, 0) == 0 else { return [] }
 
         // 建立 PPID → [(PID, name)] 映射
         var children: [pid_t: [(pid_t, String)]] = [:]
-        for line in output.components(separatedBy: "\n") {
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard parts.count >= 3 else { continue }
-            let pid = Int32(String(parts[0])) ?? 0
-            let ppid = Int32(String(parts[1])) ?? 0
-            let comm = String(parts.dropFirst(2).joined(separator: " "))
-            children[ppid, default: []].append((pid, comm))
+        for kp in procs.prefix(size / MemoryLayout<kinfo_proc>.stride) {
+            var comm = kp.kp_proc.p_comm
+            let commCapacity = MemoryLayout.size(ofValue: comm)
+            let name = withUnsafePointer(to: &comm) {
+                $0.withMemoryRebound(to: CChar.self, capacity: commCapacity) {
+                    String(cString: $0)
+                }
+            }
+            children[kp.kp_eproc.e_ppid, default: []].append((kp.kp_proc.p_pid, name))
         }
 
         var seen = Set<String>()
         var result: [String] = []
 
         func walk(pid: pid_t) {
-            for (childPid, comm) in children[pid] ?? [] {
-                let name = URL(fileURLWithPath: comm).lastPathComponent
+            for (childPid, name) in children[pid] ?? [] {
                 if seen.insert(name).inserted {
                     result.append(name)
                 }
@@ -106,11 +112,6 @@ final class GhosttyContextProvider: WindowContextProvider {
 /// 通过 /usr/bin/osascript 执行 AppleScript
 func runOSAScript(_ source: String) -> String? {
     runCommand(executable: "/usr/bin/osascript", arguments: ["-e", source])
-}
-
-/// 执行任意 shell 命令（通过 /bin/bash -c）
-func runShellCommand(_ command: String) -> String? {
-    runCommand(executable: "/bin/bash", arguments: ["-c", command])
 }
 
 /// 通用进程执行：启动可执行文件，捕获 stdout，返回输出文本

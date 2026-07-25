@@ -178,14 +178,14 @@ vim ~/.config/ime-switcher/config.json
 
 ### 场景四：窗口级规则（同一应用内按标签页/窗口切换）
 
-在 Chrome 中按当前标签页的 URL 自动切换输入法；在 Ghostty 终端中按窗口标题自动切换。
+在 Chrome 中按当前标签页的 URL 自动切换输入法；在 Ghostty 终端中按窗口标题或运行中的程序自动切换。
 
 支持的应用：
 
 | 应用 | Bundle ID | 匹配内容 | 示例 |
 |------|-----------|---------|------|
 | Chrome | `com.google.Chrome` | 当前标签页 URL | `https://zhihu.com/question/123` |
-| Ghostty | `com.mitchellh.ghostty` | 当前窗口标题 | `vim ~/docs/README.md — ghostty` |
+| Ghostty | `com.mitchellh.ghostty` | 窗口标题 + 运行中的程序名 | `vim ~/docs/README.md — ghostty` |
 
 **配置示例：**
 
@@ -214,9 +214,10 @@ vim ~/.config/ime-switcher/config.json
 **规则说明：**
 
 - `windowRules` 为数组，从上到下依次匹配，命中即止
-- `pattern` 为正则表达式，匹配 Chrome URL 或终端窗口标题
+- `pattern` 为正则表达式，匹配 Chrome URL，或 Ghostty 的窗口标题与运行中的程序名（如 `vim`、`claude`）
 - **优先级**：窗口规则 > 手动记忆缓存 > 应用级 `rules` > 全局默认
 - 切换标签页/窗口后**自动检测**并切换，无需手动操作
+- Ghostty 窗口规则通过 Accessibility API 读取窗口标题，**需要辅助功能权限**（见下方「权限说明」）
 
 ### 场景五：菜单栏操作（无需编辑配置文件）
 
@@ -295,6 +296,8 @@ vim ~/.config/ime-switcher/config.json
 | 自动切换输入法 | ❌ 不需要 |
 | 菜单栏图标与交互 | ❌ 不需要 |
 | 输入法记忆 | ❌ 不需要 |
+| Chrome 窗口规则（读标签页 URL） | ❌ 不需要 |
+| **Ghostty 窗口规则（读窗口标题）** | ✅ 需要辅助功能权限 |
 | **注释模式（`#` 触发拼音）** | ✅ 需要辅助功能或输入监控权限 |
 
 **授权步骤：**
@@ -343,7 +346,7 @@ ime-switcher/
 │   ├── HashTrigger.swift
 │   ├── InputSourceManager.swift
 │   ├── MenuController.swift
-│   ├── WindowContextProvider.swift  # 窗口上下文获取（Chrome URL / Ghostty 标题）
+│   ├── WindowContextProvider.swift  # 窗口上下文获取（Chrome URL / Ghostty 标题+进程）
 │   └── WindowMonitor.swift          # 窗口变化轮询监控器
 ├── Tools/                     # 辅助工具
 │   └── list_input_sources.swift
@@ -367,7 +370,7 @@ ime-switcher/
 - **菜单栏动态渲染** — `NSMenuDelegate` 每次打开菜单时重建，实时反映当前状态
 - **注释模式** — `CGEventTap` 监听按键，`.listenOnly` 模式不拦截输入；`isInCommentMode` 状态标记，切 App 自动复位
 - **Tap 自动恢复** — CGEventTap 被系统因负载关闭时主动重新启用，防止注释模式静默失效
-- **窗口级输入法切换** — 通过 AppleScript（`osascript`）获取 Chrome 标签 URL 和 Ghostty 窗口标题，后台队列 500ms 轮询自动检测变化，正则匹配规则后即时切换
+- **窗口级输入法切换** — Chrome 标签 URL 通过 AppleScript（`osascript`）获取；Ghostty 通过 Accessibility API 读取窗口标题，并用 `sysctl` 直接读内核进程表检测运行中的程序（如 vim、claude），后台队列 500ms 轮询自动检测变化，正则匹配规则后即时切换
 - **窗口规则优先** — 窗口规则 > 手动记忆 > 应用规则 > 全局默认，确保上下文相关的输入法选择始终优先
 
 ## ❓ 常见问题
