@@ -1,38 +1,8 @@
+import Cocoa
 import Foundation
+import IMECore
 
-// MARK: - 配置结构
-
-struct Config: Codable {
-    var rules: [String: String]
-    var defaultInputSource: String?
-    /// 在哪些 App 里触发切换到拼音（写中文注释用）
-    var hashTriggerApps: [String]? = nil
-    /// 触发键，默认 `#`
-    var hashTriggerKey: String? = nil
-    /// # 触发模式下切到的中文输入法 ID（默认取自动检测到的中文输入法）
-    var hashTriggerChineseSource: String? = nil
-    /// # 触发模式下 Enter 后切回的英文输入法 ID（默认取自动检测到的英文布局）
-    var hashTriggerEnglishSource: String? = nil
-    /// 窗口级规则（适用于同一 App 内不同窗口/标签页使用不同输入法）
-    /// - bundleID: 应用标识
-    /// - pattern: 正则表达式，匹配 Chrome URL 或终端窗口标题
-    /// - inputSource: 匹配后切换到的输入法 ID
-    var windowRules: [WindowRule]? = nil
-}
-
-// MARK: - 窗口规则
-
-/// 按窗口上下文（URL/标题）匹配的输入法规则
-///
-/// 优先级：窗口规则 > 键盘记忆 > 应用级规则 > 全局默认
-struct WindowRule: Codable {
-    /// 应用 Bundle ID（如 "com.google.Chrome"、"com.mitchellh.ghostty"）
-    let bundleID: String
-    /// 正则表达式，匹配 Chrome 的标签 URL 或终端的窗口标题
-    let pattern: String
-    /// 匹配后切换到的输入法 ID（如 "com.apple.inputmethod.SCIM.ITABC"）
-    let inputSource: String
-}
+// MARK: - 配置文件路径
 
 func configPath() -> String {
     (NSHomeDirectory() as NSString).appendingPathComponent(".config/ime-switcher/config.json")
@@ -115,7 +85,9 @@ func autoCreateConfig() {
     saveConfig(defaultConfig)
 }
 
-func loadConfig() -> Config {
+/// 读取并解析配置文件。解析失败时弹窗提示并返回 nil（调用方决定回退策略：
+/// 首次启动用空配置，重新加载时保留当前配置）。
+func loadConfig() -> Config? {
     let path = configPath()
 
     // 首次运行：自动创建配置文件
@@ -123,13 +95,29 @@ func loadConfig() -> Config {
 
     guard let data = FileManager.default.contents(atPath: path) else {
         print("⚠️ 无法读取配置文件: \(path)")
-        return Config(rules: [:], defaultInputSource: nil)
+        showConfigErrorAlert(path: path, detail: "文件不存在或无法读取")
+        return nil
     }
     do {
         return try JSONDecoder().decode(Config.self, from: data)
     } catch {
         print("⚠️ 配置文件解析失败: \(error)")
-        return Config(rules: [:], defaultInputSource: nil)
+        showConfigErrorAlert(path: path, detail: error.localizedDescription)
+        return nil
+    }
+}
+
+/// 配置出错时弹窗提示（避免 JSON 笔误导致规则静默失效）
+private func showConfigErrorAlert(path: String, detail: String) {
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "ime-switcher 配置文件解析失败"
+    alert.informativeText = "\(path)\n\n\(detail)\n\n修复后可通过菜单栏 ⌨ →「重新加载配置」恢复。"
+    alert.addButton(withTitle: "打开配置文件")
+    alert.addButton(withTitle: "继续")
+    NSApp.activate(ignoringOtherApps: true)
+    if alert.runModal() == .alertFirstButtonReturn {
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 }
 
@@ -148,5 +136,5 @@ func saveConfig(_ config: Config) {
     }
 }
 
-/// 全局配置实例（首次访问时自动加载）
-var config = loadConfig()
+/// 全局配置实例（首次访问时自动加载；解析失败时暂用空配置）
+var config = loadConfig() ?? Config(rules: [:], defaultInputSource: nil)

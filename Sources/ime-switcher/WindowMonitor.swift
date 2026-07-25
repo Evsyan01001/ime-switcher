@@ -6,10 +6,24 @@ import Cocoa
 ///
 /// 工作方式：
 /// 1. `appDidActivate(bundleID:)` — 前台应用切换时调用（由 main.swift 触发）
-/// 2. 支持的应用持续以 500ms 间隔轮询当前上下文
+/// 2. 支持的应用以 500ms 间隔轮询当前上下文；连续 30s 无变化自动降为 2s（省电），
+///    一旦检测到变化立即恢复高频
 /// 3. 上下文变化时调用 `evaluateWindowRules(bundleID:context:)` 匹配规则
+///
+/// 为什么不做成纯事件驱动（AX 通知）：Chrome 标签 URL 在不申请辅助功能权限的
+/// 前提下只能通过 AppleScript 轮询获取；Ghostty 的进程树变化本身也没有事件源，
+/// 轮询不可避免，因此用自适应降频在响应速度和开销之间折中。
 final class WindowMonitor {
     static let shared = WindowMonitor()
+
+    // MARK: - 轮询频率
+
+    /// 活跃期轮询间隔（正在切换标签页/窗口时）
+    private let activePollInterval: TimeInterval = 0.5
+    /// 空闲期轮询间隔（长时间无变化时）
+    private let idlePollInterval: TimeInterval = 2.0
+    /// 连续多少次检查无变化后进入空闲降频（60 × 0.5s = 30s）
+    private let idleThresholdChecks = 60
 
     // MARK: - 上下文获取提供器
 
@@ -26,6 +40,10 @@ final class WindowMonitor {
     private var timer: DispatchSourceTimer?
     private var currentBundleID: String?
     private var lastContext: String?
+    /// 连续无变化的检查次数（用于自适应降频）
+    private var idleCheckCount = 0
+    /// 当前轮询间隔
+    private var currentInterval: TimeInterval = 0
 
     private init() {}
 
@@ -41,7 +59,8 @@ final class WindowMonitor {
                 // 切换到支持的应用 → 开始监控
                 self.currentBundleID = bundleID
                 self.lastContext = nil
-                self._startTimer()
+                self.idleCheckCount = 0
+                self._startTimer(interval: self.activePollInterval)
                 self._checkNow(bundleID: bundleID)
             } else {
                 // 切换到不支持的应用 → 停止监控
@@ -59,10 +78,11 @@ final class WindowMonitor {
 
     // MARK: - 内部实现
 
-    private func _startTimer() {
+    private func _startTimer(interval: TimeInterval) {
         _stopTimer() // 确保不重复创建
+        currentInterval = interval
         let t = DispatchSource.makeTimerSource(queue: queue)
-        t.schedule(deadline: .now() + 0.5, repeating: 0.5, leeway: .milliseconds(100))
+        t.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(100))
         t.setEventHandler { [weak self] in
             guard let self, let bundleID = self.currentBundleID else { return }
             self._checkNow(bundleID: bundleID)
@@ -92,8 +112,20 @@ final class WindowMonitor {
             return
         }
 
-        // 上下文未变化则跳过
-        guard ctx != lastContext else { return }
+        // 上下文未变化：累计空闲计数，达到阈值后降频省电
+        guard ctx != lastContext else {
+            idleCheckCount += 1
+            if idleCheckCount >= idleThresholdChecks, currentInterval != idlePollInterval {
+                _startTimer(interval: idlePollInterval)
+            }
+            return
+        }
+
+        // 上下文变化：重置空闲计数并恢复高频轮询
+        idleCheckCount = 0
+        if currentInterval != activePollInterval {
+            _startTimer(interval: activePollInterval)
+        }
 
         let prevContext = lastContext
         lastContext = ctx

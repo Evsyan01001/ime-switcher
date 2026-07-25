@@ -1,5 +1,6 @@
 import Cocoa
 import Carbon
+import IMECore
 
 // MARK: - # 触发拼音（注释模式）
 

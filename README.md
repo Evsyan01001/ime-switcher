@@ -338,6 +338,7 @@ rm ~/Library/LaunchAgents/com.user.ime-switcher.plist
 ```
 ime-switcher/
 ├── Package.swift              # Swift Package Manager 清单
+├── Sources/IMECore/           # 可测试的核心纯逻辑库（配置模型、窗口规则匹配）
 ├── Sources/ime-switcher/      # 主程序源码
 │   ├── main.swift
 │   ├── AppKeyboardCache.swift
@@ -350,6 +351,7 @@ ime-switcher/
 │   └── WindowMonitor.swift          # 窗口变化轮询监控器
 ├── Tools/                     # 辅助工具
 │   └── list_input_sources.swift
+├── Tests/IMECoreTests/        # 核心逻辑测试（swift run IMECoreTests，无需 Xcode）
 ├── Resources/                 # 资源文件
 │   ├── config.example.json
 │   └── com.user.ime-switcher.plist

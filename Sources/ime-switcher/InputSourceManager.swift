@@ -28,6 +28,7 @@ func selectInputSource(id: String) {
 
     // 记录目标 ID，代替时刻性布尔开关（见 AppKeyboardCache 里的说明）
     AppKeyboardCache.lastProgrammaticTargetID = id
+    AppKeyboardCache.lastProgrammaticSwitchTime = Date()
 
     let result = TISSelectInputSource(source)
     if result != noErr {
@@ -40,6 +41,14 @@ func selectInputSource(id: String) {
     // ── 验证重试: CJKV 输入法可能延迟生效 ──
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [id] in
         guard currentInputSourceID() != id else { return }
+
+        // 用户在这 130ms 内手动切了输入法 → 尊重用户选择，放弃补切
+        if let manual = AppKeyboardCache.lastManualChangeTime,
+           let programmatic = AppKeyboardCache.lastProgrammaticSwitchTime,
+           manual > programmatic {
+            print("⏭️ 检测到手动切换，放弃补充切换: \(id)")
+            return
+        }
 
         print("⏳ 补充切换: \(id)")
         if let retrySource = findInputSource(withID: id) {

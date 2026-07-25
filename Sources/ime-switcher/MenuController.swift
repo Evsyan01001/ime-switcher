@@ -1,4 +1,5 @@
 import Cocoa
+import IMECore
 
 // MARK: - 菜单栏控制器
 
@@ -97,7 +98,8 @@ class MenuController: NSObject, NSMenuDelegate {
             menu.addItem(parentItem)
         }
 
-        // ── 忘记当前 App 的记忆 ──
+        // ── 输入法记忆 ──
+        var addedCacheItems = false
         if AppKeyboardCache.shared.hasCacheForFrontmostApp {
             let forgetItem = NSMenuItem(
                 title: "忘记这个 App 的偏好",
@@ -106,6 +108,19 @@ class MenuController: NSObject, NSMenuDelegate {
             )
             forgetItem.target = self
             menu.addItem(forgetItem)
+            addedCacheItems = true
+        }
+        if !AppKeyboardCache.shared.isEmpty {
+            let clearAllItem = NSMenuItem(
+                title: "清除全部记忆",
+                action: #selector(clearAllPreferences),
+                keyEquivalent: ""
+            )
+            clearAllItem.target = self
+            menu.addItem(clearAllItem)
+            addedCacheItems = true
+        }
+        if addedCacheItems {
             menu.addItem(.separator())
         }
 
@@ -137,13 +152,30 @@ class MenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func reloadConfigAction() {
-        config = loadConfig()
+        // 解析失败时保留当前配置（loadConfig 已弹窗提示原因）
+        guard let newConfig = loadConfig() else {
+            print("🔄 配置解析失败，保留当前配置")
+            return
+        }
+        config = newConfig
         print("🔄 配置已重新加载")
     }
 
     @objc private func forgetAppPreference() {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
         AppKeyboardCache.shared.remove(bundleID: bundleID)
+    }
+
+    @objc private func clearAllPreferences() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "清除全部输入法记忆？"
+        alert.informativeText = "所有 App 的手动选择记录将被删除，之后恢复按配置文件规则切换。"
+        alert.addButton(withTitle: "清除")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            AppKeyboardCache.shared.removeAll()
+        }
     }
 
     @objc private func customizeTriggerKey() {

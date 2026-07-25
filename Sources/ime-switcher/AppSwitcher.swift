@@ -1,4 +1,5 @@
 import Cocoa
+import IMECore
 
 // MARK: - 应用切换逻辑
 
@@ -34,23 +35,15 @@ func evaluateWindowRules(bundleID: String, context: String) {
         return
     }
 
-    let appRules = windowRules.filter { $0.bundleID == bundleID }
-    guard !appRules.isEmpty else {
-        handleAppRule(bundleID: bundleID)
-        return
-    }
-
     // 依次匹配窗口规则（配置顺序决定优先级）
-    for rule in appRules {
-        if context.range(of: rule.pattern, options: .regularExpression) != nil {
-            if rule.inputSource != currentInputSourceID() {
-                print("🏢 窗口规则命中: 「\(rule.pattern)」→ \(rule.inputSource)")
-                selectInputSource(id: rule.inputSource)
-            } else {
-                print("⏭️ 窗口规则命中，但当前已是 \(rule.inputSource)")
-            }
-            return
+    if let rule = matchWindowRule(windowRules, bundleID: bundleID, context: context) {
+        if rule.inputSource != currentInputSourceID() {
+            print("🏢 窗口规则命中: 「\(rule.pattern)」→ \(rule.inputSource)")
+            selectInputSource(id: rule.inputSource)
+        } else {
+            print("⏭️ 窗口规则命中，但当前已是 \(rule.inputSource)")
         }
+        return
     }
 
     // 无窗口规则匹配 → 回退到应用级规则

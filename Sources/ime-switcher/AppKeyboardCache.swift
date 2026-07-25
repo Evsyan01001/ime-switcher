@@ -28,6 +28,14 @@ final class AppKeyboardCache {
     /// 通知真正送达之前，存在一个会被误判的竞争窗口。
     static var lastProgrammaticTargetID: String?
 
+    /// 最后一次程序化切换的发起时间（配合 lastManualChangeTime 判断重试是否应放弃）
+    static var lastProgrammaticSwitchTime: Date?
+
+    /// 最后一次检测到用户手动切换输入法的时间。
+    /// 验证重试（selectInputSource 的 130ms 延迟补切）发现该时间晚于
+    /// 程序化切换时间时放弃重试，避免覆盖用户刚刚的手动选择。
+    static var lastManualChangeTime: Date?
+
     private var cache: [String: String] = [:]
     private let saveURL: URL
 
@@ -36,6 +44,7 @@ final class AppKeyboardCache {
         let path = (home as NSString).appendingPathComponent(".config/ime-switcher/app-keyboard-cache.json")
         saveURL = URL(fileURLWithPath: path)
         load()
+        pruneStaleEntries()
         registerInputSourceObserver()
     }
 
@@ -62,6 +71,18 @@ final class AppKeyboardCache {
         print("🧠 已忘记 \(bundleID) 的偏好")
     }
 
+    /// 清除全部记忆缓存
+    func removeAll() {
+        cache.removeAll()
+        save()
+        print("🧠 已清除全部输入法记忆")
+    }
+
+    /// 缓存是否为空（供菜单栏判断是否展示清除入口）
+    var isEmpty: Bool {
+        cache.isEmpty
+    }
+
     /// 当前前台应用是否有缓存
     var hasCacheForFrontmostApp: Bool {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return false }
@@ -78,6 +99,9 @@ final class AppKeyboardCache {
         // 是我们自己刚触发的切换（规则匹配 / # 触发拼音 / Enter 切回英文等），
         // 不当作用户手动切换记录，避免污染记忆缓存
         if currentID == Self.lastProgrammaticTargetID { return }
+
+        // 到达这里说明是用户手动切换
+        Self.lastManualChangeTime = Date()
 
         if cache[bundleID] != currentID {
             cache[bundleID] = currentID
@@ -108,6 +132,17 @@ final class AppKeyboardCache {
         }
         cache = decoded
         print("🧠 已加载 \(cache.count) 条输入法记忆")
+    }
+
+    /// 清理已卸载 App 的记忆条目（启动时调用一次，防止缓存无限增长）
+    private func pruneStaleEntries() {
+        let stale = cache.keys.filter {
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) == nil
+        }
+        guard !stale.isEmpty else { return }
+        stale.forEach { cache.removeValue(forKey: $0) }
+        save()
+        print("🧠 已清理 \(stale.count) 条失效记忆（App 已卸载）")
     }
 
     // MARK: - 监听系统输入法变化通知
