@@ -296,7 +296,7 @@ vim ~/.config/ime-switcher/config.json
 | 自动切换输入法 | ❌ 不需要 |
 | 菜单栏图标与交互 | ❌ 不需要 |
 | 输入法记忆 | ❌ 不需要 |
-| Chrome 窗口规则（读标签页 URL） | ❌ 不需要 |
+| **Chrome 窗口规则（读标签页 URL）** | ✅ 需要自动化权限（控制 Google Chrome） |
 | **Ghostty 窗口规则（读窗口标题）** | ✅ 需要辅助功能权限 |
 | **注释模式（`#` 触发拼音）** | ✅ 需要辅助功能或输入监控权限 |
 
@@ -306,6 +306,13 @@ vim ~/.config/ime-switcher/config.json
 2. 点击 **辅助功能**（或 **输入监控**）
 3. 点击 `+` 添加 `~/Applications/ime-switcher.app`（用 install.sh 安装后；裸跑则是 `.build/release/ime-switcher`）
 4. 重启程序生效：`launchctl kickstart -k gui/$(id -u)/com.user.ime-switcher`（或直接 `kill` 后重启）
+
+**自动化权限（Chrome 窗口规则）：**
+
+首次读取 Chrome 标签页 URL 时，macOS 会弹「ime-switcher 想要控制 Google Chrome」，
+点击 **允许** 即可。若误点了拒绝：系统设置 → 隐私与安全性 → **自动化** →
+找到 ime-switcher → 打开 **Google Chrome** 开关，然后重启程序。
+被拒绝期间窗口规则静默不生效，日志会出现 `⚠️ 自动化权限被拒绝` 提示（每次启动只报一次）。
 
 > 用 `./install.sh` 安装并签名后，重打包授权继续有效（权限绑定签名身份而非文件路径）。
 

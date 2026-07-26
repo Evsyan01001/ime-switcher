@@ -114,6 +114,11 @@ func runOSAScript(_ source: String) -> String? {
     runCommand(executable: "/usr/bin/osascript", arguments: ["-e", source])
 }
 
+/// 自动化权限（-1743）警告是否已打印过。
+/// 被拒绝后每次 osascript 都会失败，窗口监控 500ms 轮询会把日志刷爆，
+/// 因此同一进程生命周期内只提示一次；授权后调用自然恢复成功，无需重置。
+private var automationDeniedWarned = false
+
 /// 通用进程执行：启动可执行文件，捕获 stdout，返回输出文本
 private func runCommand(executable: String, arguments: [String]) -> String? {
     let process = Process()
@@ -132,7 +137,21 @@ private func runCommand(executable: String, arguments: [String]) -> String? {
         guard process.terminationStatus == 0 else {
             let errData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             if let errMsg = String(data: errData, encoding: .utf8), !errMsg.isEmpty {
-                print("⚠️ 命令执行错误: \(errMsg.trimmingCharacters(in: .whitespacesAndNewlines))")
+                let trimmed = errMsg.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // -1743 = errAEEventNotPermitted：用户在「想要控制 xxx」弹窗点了拒绝，
+                // 或自动化权限被关闭。给出可操作的指引，而不是混在通用错误里。
+                if trimmed.contains("-1743") || trimmed.contains("Not authorized to send Apple events") {
+                    if !automationDeniedWarned {
+                        automationDeniedWarned = true
+                        print("⚠️ 自动化权限被拒绝：无法通过 AppleScript 控制其他 App（窗口规则暂不生效）")
+                        print("   → 系统设置 → 隐私与安全性 → 自动化 → 允许 ime-switcher 控制对应应用")
+                        print("   → 然后重启程序: launchctl kickstart -k gui/\(getuid())/com.user.ime-switcher")
+                    }
+                    return nil
+                }
+
+                print("⚠️ 命令执行错误: \(trimmed)")
             }
             return nil
         }
