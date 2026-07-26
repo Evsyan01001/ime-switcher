@@ -178,13 +178,14 @@ vim ~/.config/ime-switcher/config.json
 
 ### 场景四：窗口级规则（同一应用内按标签页/窗口切换）
 
-在 Chrome 中按当前标签页的 URL 自动切换输入法；在 Ghostty 终端中按窗口标题或运行中的程序自动切换。
+在 Chrome / ego lite 中按当前标签页的 URL 自动切换输入法；在 Ghostty 终端中按窗口标题或运行中的程序自动切换。
 
 支持的应用：
 
 | 应用 | Bundle ID | 匹配内容 | 示例 |
 |------|-----------|---------|------|
 | Chrome | `com.google.Chrome` | 当前标签页 URL | `https://zhihu.com/question/123` |
+| ego lite | `com.citrolabs.ego.lite` | 当前标签页 URL | `https://claude.ai/chat/xxx` |
 | Ghostty | `com.mitchellh.ghostty` | 窗口标题 + 运行中的程序名 | `vim ~/docs/README.md — ghostty` |
 
 **配置示例：**
@@ -296,7 +297,7 @@ vim ~/.config/ime-switcher/config.json
 | 自动切换输入法 | ❌ 不需要 |
 | 菜单栏图标与交互 | ❌ 不需要 |
 | 输入法记忆 | ❌ 不需要 |
-| **Chrome 窗口规则（读标签页 URL）** | ✅ 需要自动化权限（控制 Google Chrome） |
+| **浏览器窗口规则（Chrome / ego lite，读标签页 URL）** | ✅ 需要自动化权限（控制对应浏览器） |
 | **Ghostty 窗口规则（读窗口标题）** | ✅ 需要辅助功能权限 |
 | **注释模式（`#` 触发拼音）** | ✅ 需要辅助功能或输入监控权限 |
 

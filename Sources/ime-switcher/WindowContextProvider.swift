@@ -18,6 +18,14 @@ final class ChromeContextProvider: WindowContextProvider {
     }
 }
 
+// MARK: - ego lite 实现（Chromium 内核，AppleScript 接口与 Chrome 相同）
+
+final class EgoLiteContextProvider: WindowContextProvider {
+    func currentContext() -> String? {
+        runOSAScript("tell application \"ego lite\" to get URL of active tab of front window")
+    }
+}
+
 // MARK: - Ghostty 实现（窗口标题 + 进程检测）
 
 /// 通过 Accessibility API 获取窗口标题，并通过进程树遍历检测当前运行的程序。

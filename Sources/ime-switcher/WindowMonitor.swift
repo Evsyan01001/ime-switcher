@@ -30,6 +30,7 @@ final class WindowMonitor {
     /// 支持的应用及其对应的上下文获取方式
     private let providers: [String: WindowContextProvider] = [
         "com.google.Chrome": ChromeContextProvider(),
+        "com.citrolabs.ego.lite": EgoLiteContextProvider(),
         "com.mitchellh.ghostty": GhosttyContextProvider(),
     ]
 
