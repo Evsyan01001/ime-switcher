@@ -77,6 +77,21 @@ final class WindowMonitor {
         }
     }
 
+    /// 供菜单栏读取：当前前台受支持应用的上下文（bundleID, context）。
+    /// 优先用监控缓存；刚切换过来还没轮询到时同步取一次（约 100~300ms）。
+    func contextForFrontmostApp() -> (bundleID: String, context: String)? {
+        if let cached = queue.sync(execute: { () -> (String, String)? in
+            guard let bundleID = currentBundleID, let ctx = lastContext else { return nil }
+            return (bundleID, ctx)
+        }) {
+            return cached
+        }
+        guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return nil }
+        let provider = queue.sync { providers[bundleID] }
+        guard let provider, let ctx = provider.currentContext() else { return nil }
+        return (bundleID, ctx)
+    }
+
     // MARK: - 内部实现
 
     private func _startTimer(interval: TimeInterval) {

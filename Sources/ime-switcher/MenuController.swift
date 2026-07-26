@@ -60,6 +60,27 @@ class MenuController: NSObject, NSMenuDelegate {
             menu.addItem(item)
         }
 
+        // ── 浏览器页面规则：当前网站 / 当前页面 ──
+        // 前台是支持窗口规则的浏览器时，直接把当前 URL 生成 windowRules，无需手编配置
+        if let (bundleID, ctx) = WindowMonitor.shared.contextForFrontmostApp(),
+           ctx.contains("://") {
+            if let host = URL(string: ctx)?.host, !host.isEmpty {
+                let hostPattern = host.replacingOccurrences(of: ".", with: "\\.")
+                addPageRuleSubmenu(
+                    to: menu,
+                    title: "将当前网站（\(host)）设为",
+                    bundleID: bundleID,
+                    pattern: hostPattern
+                )
+            }
+            addPageRuleSubmenu(
+                to: menu,
+                title: "将当前页面设为",
+                bundleID: bundleID,
+                pattern: NSRegularExpression.escapedPattern(for: ctx)
+            )
+        }
+
         menu.addItem(.separator())
 
         // ── 注释模式 ──
@@ -143,6 +164,39 @@ class MenuController: NSObject, NSMenuDelegate {
     }
 
     // MARK: Actions
+
+    /// 构建「网站/页面 → 输入法」子菜单（选中项打勾表示已有同 pattern 规则）
+    private func addPageRuleSubmenu(to menu: NSMenu, title: String, bundleID: String, pattern: String) {
+        let parentItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for (id, name) in selectableInputSources() {
+            let item = NSMenuItem(title: name, action: #selector(setWindowRuleForCurrentPage(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = (bundleID, pattern, id)
+            if config.windowRules?.contains(where: {
+                $0.bundleID == bundleID && $0.pattern == pattern && $0.inputSource == id
+            }) == true {
+                item.state = .on
+            }
+            submenu.addItem(item)
+        }
+        menu.setSubmenu(submenu, for: parentItem)
+        menu.addItem(parentItem)
+    }
+
+    @objc private func setWindowRuleForCurrentPage(_ sender: NSMenuItem) {
+        guard let (bundleID, pattern, imeID) = sender.representedObject as? (String, String, String) else { return }
+
+        var rules = config.windowRules ?? []
+        // 同 App 同 pattern 的旧规则替换掉，避免重复
+        rules.removeAll { $0.bundleID == bundleID && $0.pattern == pattern }
+        // 插到最前：菜单设置的精确规则优先于配置文件里的宽泛规则
+        rules.insert(WindowRule(bundleID: bundleID, pattern: pattern, inputSource: imeID), at: 0)
+        config.windowRules = rules
+        saveConfig(config)
+        selectInputSource(id: imeID)
+        print("🌐 已添加窗口规则: 「\(pattern)」→ \(imeID)")
+    }
 
     @objc private func setRuleForCurrentApp(_ sender: NSMenuItem) {
         guard let (bundleID, imeID) = sender.representedObject as? (String, String) else { return }
