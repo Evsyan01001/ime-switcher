@@ -304,32 +304,42 @@ vim ~/.config/ime-switcher/config.json
 
 1. 打开 **系统设置 → 隐私与安全性**
 2. 点击 **辅助功能**（或 **输入监控**）
-3. 点击 `+` 添加 `.build/release/ime-switcher`
-4. 完全退出程序（`kill`），重新启动
+3. 点击 `+` 添加 `~/Applications/ime-switcher.app`（用 install.sh 安装后；裸跑则是 `.build/release/ime-switcher`）
+4. 重启程序生效：`launchctl kickstart -k gui/$(id -u)/com.user.ime-switcher`（或直接 `kill` 后重启）
 
-> 如果用 `./build.sh` 重新编译后，二进制路径不变（仍在 `.build/release/`），授权继续有效。
+> 用 `./install.sh` 安装并签名后，重打包授权继续有效（权限绑定签名身份而非文件路径）。
 
 ---
 
-## 🔄 开机自启（可选）
+## 📦 安装为应用 + 开机自启（推荐）
+
+一条命令完成：编译 → 打包 `.app` → 代码签名 → 注册 LaunchAgent 开机自启。
 
 ```bash
-# 1. 将程序复制到系统路径
-sudo cp .build/release/ime-switcher /usr/local/bin/ime-switcher
-
-# 2. 安装 LaunchAgent
-cp Resources/com.user.ime-switcher.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.user.ime-switcher.plist
+./install.sh
 ```
 
-**停止 / 卸载：**
+安装后：
+
+- **应用**：`~/Applications/ime-switcher.app`（Spotlight 可搜到，无 Dock 图标）
+- **自启**：`~/Library/LaunchAgents/com.user.ime-switcher.plist`（含 `KeepAlive`，异常退出自动重启）
+- **日志**：`~/Library/Logs/ime-switcher.log` / `.err`
+
+**卸载：**
 
 ```bash
-launchctl bootout gui/$(id -u)/com.user.ime-switcher
-rm ~/Library/LaunchAgents/com.user.ime-switcher.plist
+./install.sh uninstall
 ```
 
-> 开机自启配置了 `KeepAlive`，异常退出后自动重启。日志在 `/tmp/ime-switcher.log` 和 `/tmp/ime-switcher.err`。
+> **关于代码签名：** 辅助功能/输入监控权限绑定签名身份。使用自签名证书
+> （钥匙串中的 `ime-switcher-local`）签名后，重新打包权限依然有效；
+> 找不到证书时 install.sh 会自动退回 ad-hoc 签名并提示。
+>
+> **更新程序：** 改完代码直接再跑一遍 `./install.sh` 即可，权限和自启都会保留。
+
+### 手动方式（不推荐）
+
+也可直接运行编译产物（见「快速开始」），但裸二进制重编译后辅助功能权限可能失效。
 
 ---
 
@@ -353,9 +363,9 @@ ime-switcher/
 │   └── list_input_sources.swift
 ├── Tests/IMECoreTests/        # 核心逻辑测试（swift run IMECoreTests，无需 Xcode）
 ├── Resources/                 # 资源文件
-│   ├── config.example.json
-│   └── com.user.ime-switcher.plist
+│   └── config.example.json
 ├── build.sh                   # 编译快捷脚本
+├── install.sh                 # 一键安装（打包 .app + 签名 + 开机自启）
 ├── README.md
 └── LICENSE
 ```
