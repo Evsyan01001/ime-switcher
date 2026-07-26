@@ -58,10 +58,13 @@ final class GhosttyContextProvider: WindowContextProvider {
         let appElement = AXUIElementCreateApplication(pid)
         var focusedWindow: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, "AXFocusedWindow" as CFString, &focusedWindow) == .success,
-              let window = focusedWindow else { return nil }
+              let window = focusedWindow,
+              // 防御性校验：异常状态下返回的可能不是 AXUIElement，直接 as! 会崩溃
+              CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+        let axWindow = window as! AXUIElement // 上面已校验类型，此处安全
 
         var title: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window as! AXUIElement, "AXTitle" as CFString, &title) == .success,
+        guard AXUIElementCopyAttributeValue(axWindow, "AXTitle" as CFString, &title) == .success,
               let t = title as? String, !t.isEmpty else { return nil }
         return t
     }
