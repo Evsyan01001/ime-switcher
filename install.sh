@@ -36,6 +36,8 @@ swift build -c release 2>&1 | tail -1
 echo "📦 打包 $APP_DIR ..."
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp ".build/release/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp Resources/AppIcon.icns Resources/MenuBarIcon.png Resources/MenuBarIcon@2x.png Resources/MenuBarIcon@3x.png \
+   "$APP_DIR/Contents/Resources/"
 
 cat > "$APP_DIR/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -50,6 +52,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <string>$APP_NAME</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleVersion</key>
     <string>1.3</string>
     <key>CFBundleShortVersionString</key>

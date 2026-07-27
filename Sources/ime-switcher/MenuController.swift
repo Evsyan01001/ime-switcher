@@ -11,10 +11,17 @@ class MenuController: NSObject, NSMenuDelegate {
         super.init()
 
         if let button = statusItem.button {
-            button.image = NSImage(
-                systemSymbolName: "keyboard",
-                accessibilityDescription: "IME Switcher"
-            )
+            // 自定义菜单栏图标，标记为模板图像以自动适配深色/浅色菜单栏
+            if let iconURL = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+               let image = NSImage(contentsOf: iconURL) {
+                image.isTemplate = true
+                button.image = image
+            } else {
+                button.image = NSImage(
+                    systemSymbolName: "keyboard",
+                    accessibilityDescription: "IME Switcher"
+                )
+            }
         }
 
         let menu = NSMenu()
