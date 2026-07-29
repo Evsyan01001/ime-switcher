@@ -90,6 +90,28 @@ class MenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // ── Ghostty 进程规则：当前进程 ──
+        if let (bundleID, ctx) = WindowMonitor.shared.contextForFrontmostApp(),
+           bundleID == "com.mitchellh.ghostty" {
+            let procNames = parseGhosttyProc(from: ctx)
+            for procName in procNames {
+                addProcessRuleSubmenu(
+                    to: menu,
+                    title: "将当前进程「\(procName)」设为",
+                    bundleID: bundleID,
+                    procName: procName
+                )
+            }
+            if let title = parseGhosttyTitle(from: ctx) {
+                addPageRuleSubmenu(
+                    to: menu,
+                    title: "将当前标签页设为",
+                    bundleID: bundleID,
+                    pattern: NSRegularExpression.escapedPattern(for: title)
+                )
+            }
+        }
+
         // ── 注释模式 ──
         if let app = NSWorkspace.shared.frontmostApplication,
            let bundleID = app.bundleIdentifier,
@@ -210,6 +232,71 @@ class MenuController: NSObject, NSMenuDelegate {
         config.rules[bundleID] = imeID
         saveConfig(config)
         selectInputSource(id: imeID)
+    }
+
+    // MARK: - Ghostty 进程规则
+
+    /// 添加「当前进程 → 输入法」子菜单（选中项打勾表示已有同 proc 的规则）
+    private func addProcessRuleSubmenu(to menu: NSMenu, title: String, bundleID: String, procName: String) {
+        let parentItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        let pattern = ghosttyProcPattern(for: procName)
+        for (id, name) in selectableInputSources() {
+            let item = NSMenuItem(title: name, action: #selector(setWindowRuleForCurrentProcess(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = (bundleID, procName, id)
+            if config.windowRules?.contains(where: {
+                $0.bundleID == bundleID && $0.pattern == pattern && $0.inputSource == id
+            }) == true {
+                item.state = .on
+            }
+            submenu.addItem(item)
+        }
+        menu.setSubmenu(submenu, for: parentItem)
+        menu.addItem(parentItem)
+    }
+
+    @objc private func setWindowRuleForCurrentProcess(_ sender: NSMenuItem) {
+        guard let (bundleID, procName, imeID) = sender.representedObject as? (String, String, String) else { return }
+
+        let pattern = ghosttyProcPattern(for: procName)
+
+        var rules = config.windowRules ?? []
+        // 同 App 同 pattern 的旧规则替换掉，避免重复
+        rules.removeAll { $0.bundleID == bundleID && $0.pattern == pattern }
+        // 插到最前：菜单设置的精确规则优先于配置文件里的宽泛规则
+        rules.insert(WindowRule(bundleID: bundleID, pattern: pattern, inputSource: imeID), at: 0)
+        config.windowRules = rules
+        saveConfig(config)
+        selectInputSource(id: imeID)
+        print("🌐 已添加 Ghostty 进程规则: 「\(procName)」→ \(imeID)")
+    }
+
+    /// 生成 Ghostty 进程匹配模式：匹配 proc: 段中独立的进程名
+    private func ghosttyProcPattern(for procName: String) -> String {
+        // 格式: "title:... | proc:zsh,vim,node"
+        // 用 \b 词边界确保不会部分匹配（如 "vim" 不会匹配 "vimproc"）
+        let escaped = NSRegularExpression.escapedPattern(for: procName)
+        return "proc:.*\\b\(escaped)\\b.*"
+    }
+
+    /// 从 Ghostty 上下文解析出进程名列表
+    private func parseGhosttyProc(from context: String) -> [String] {
+        guard let range = context.range(of: "proc:") else { return [] }
+        let afterProc = context[range.upperBound...]
+        return afterProc.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }.filter { !$0.isEmpty }
+    }
+
+    /// 从 Ghostty 上下文解析出窗口标题
+    private func parseGhosttyTitle(from context: String) -> String? {
+        guard context.hasPrefix("title:") else { return nil }
+        let afterPrefix = context.dropFirst(6) // "title:" length
+        if let pipeRange = afterPrefix.range(of: " | ") {
+            return String(afterPrefix[..<pipeRange.lowerBound]).trimmingCharacters(in: .whitespaces)
+        }
+        return String(afterPrefix).trimmingCharacters(in: .whitespaces)
     }
 
     @objc private func reloadConfigAction() {
