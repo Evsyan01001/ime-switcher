@@ -18,28 +18,20 @@ private func _onInputSourceChanged(
 ///
 /// 优先级：记忆缓存 > 配置规则 > 默认值。
 /// 用户在某个 App 里手动切换输入法后自动记录，覆盖固定规则。
+///
+/// 线程安全：`handleChange()` 在 CFNotificationCenter 的投递线程上执行，
+/// 其余 API 在主线程执行，内部用锁保护 `cache` 字典。
 final class AppKeyboardCache {
-    static let shared = AppKeyboardCache()
+    private let tracker: InputSwitchTracker
+    private let inputSourceManager: InputSourceManager
 
-    /// 记录我们自己最后一次程序化切换的目标输入法 ID。
-    /// 用「通知里的新 ID 是否等于这个值」判断是否是我们自己触发的切换，
-    /// 而不是用一个时刻性的布尔开关 —— 分布式通知的送达时机不确定，
-    /// 布尔开关在「设 true → 调用 API → 设 false」这几行代码执行完之后、
-    /// 通知真正送达之前，存在一个会被误判的竞争窗口。
-    static var lastProgrammaticTargetID: String?
-
-    /// 最后一次程序化切换的发起时间（配合 lastManualChangeTime 判断重试是否应放弃）
-    static var lastProgrammaticSwitchTime: Date?
-
-    /// 最后一次检测到用户手动切换输入法的时间。
-    /// 验证重试（selectInputSource 的 130ms 延迟补切）发现该时间晚于
-    /// 程序化切换时间时放弃重试，避免覆盖用户刚刚的手动选择。
-    static var lastManualChangeTime: Date?
-
+    private let lock = NSLock()
     private var cache: [String: String] = [:]
     private let saveURL: URL
 
-    private init() {
+    init(tracker: InputSwitchTracker, inputSourceManager: InputSourceManager) {
+        self.tracker = tracker
+        self.inputSourceManager = inputSourceManager
         let home = NSHomeDirectory()
         let path = (home as NSString).appendingPathComponent(".config/ime-switcher/app-keyboard-cache.json")
         saveURL = URL(fileURLWithPath: path)
@@ -61,64 +53,83 @@ final class AppKeyboardCache {
 
     /// 获取某个 App 缓存的输入法
     func inputSource(for bundleID: String) -> String? {
-        cache[bundleID]
+        lock.lock()
+        defer { lock.unlock() }
+        return cache[bundleID]
     }
 
     /// 删除某个 App 的缓存
     func remove(bundleID: String) {
+        lock.lock()
         cache.removeValue(forKey: bundleID)
+        lock.unlock()
         save()
         print("🧠 已忘记 \(bundleID) 的偏好")
     }
 
     /// 清除全部记忆缓存
     func removeAll() {
+        lock.lock()
         cache.removeAll()
+        lock.unlock()
         save()
         print("🧠 已清除全部输入法记忆")
     }
 
     /// 缓存是否为空（供菜单栏判断是否展示清除入口）
     var isEmpty: Bool {
-        cache.isEmpty
+        lock.lock()
+        defer { lock.unlock() }
+        return cache.isEmpty
     }
 
     /// 当前前台应用是否有缓存
     var hasCacheForFrontmostApp: Bool {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return false }
+        lock.lock()
+        defer { lock.unlock() }
         return cache[bundleID] != nil
     }
 
-    // MARK: - 输入法变更处理
+    // MARK: - 输入法变更处理（CFNotificationCenter 投递线程）
 
     fileprivate func handleChange() {
-        guard let currentID = currentInputSourceID(),
+        guard let currentID = inputSourceManager.currentInputSourceID(),
               let frontApp = NSWorkspace.shared.frontmostApplication,
               let bundleID = frontApp.bundleIdentifier else { return }
 
         // 是我们自己刚触发的切换（规则匹配 / # 触发拼音 / Enter 切回英文等），
         // 不当作用户手动切换记录，避免污染记忆缓存
-        if currentID == Self.lastProgrammaticTargetID { return }
+        if tracker.isOwnSwitch(currentID) { return }
 
         // 到达这里说明是用户手动切换
-        Self.lastManualChangeTime = Date()
+        tracker.recordManualChange()
 
-        if cache[bundleID] != currentID {
+        lock.lock()
+        let changed = cache[bundleID] != currentID
+        if changed {
             cache[bundleID] = currentID
+        }
+        lock.unlock()
+
+        if changed {
             save()
-            print("🧠 已记住 \(frontApp.localizedName ?? bundleID) → \(inputSourceName(forID: currentID) ?? currentID)")
+            print("🧠 已记住 \(frontApp.localizedName ?? bundleID) → \(inputSourceManager.inputSourceName(forID: currentID) ?? currentID)")
         }
     }
 
     // MARK: - 持久化
 
     private func save() {
+        lock.lock()
+        let snapshot = cache
+        lock.unlock()
         do {
             try FileManager.default.createDirectory(
                 at: saveURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let data = try JSONEncoder().encode(cache)
+            let data = try JSONEncoder().encode(snapshot)
             try data.write(to: saveURL)
         } catch {
             print("⚠️ 记忆缓存保存失败: \(error)")

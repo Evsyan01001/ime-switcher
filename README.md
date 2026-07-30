@@ -361,7 +361,7 @@ vim ~/.config/ime-switcher/config.json
 ```
 ime-switcher/
 ├── Package.swift              # Swift Package Manager 清单
-├── Sources/IMECore/           # 可测试的核心纯逻辑库（配置模型、窗口规则匹配）
+├── Sources/IMECore/           # 可测试的核心纯逻辑库（配置模型、窗口规则匹配、窗口上下文、输入法决策）
 ├── Sources/ime-switcher/      # 主程序源码
 │   ├── main.swift
 │   ├── AppKeyboardCache.swift

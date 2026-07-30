@@ -1,20 +1,22 @@
 import Cocoa
+import IMECore
 
 // MARK: - 窗口上下文变化监控器
 
-/// 监控 Chrome/Ghostty 的窗口/标签页变化，匹配窗口规则后自动切换输入法。
+/// 监控 Chrome/Ghostty 的窗口/标签页变化，变化时通过 `onContextChange` 回调通知。
 ///
 /// 工作方式：
-/// 1. `appDidActivate(bundleID:)` — 前台应用切换时调用（由 main.swift 触发）
+/// 1. `appDidActivate(bundleID:)` — 前台应用切换时调用（由 AppSwitchHandler 触发）
 /// 2. 支持的应用以 500ms 间隔轮询当前上下文；连续 30s 无变化自动降为 2s（省电），
 ///    一旦检测到变化立即恢复高频
-/// 3. 上下文变化时调用 `evaluateWindowRules(bundleID:context:)` 匹配规则
+/// 3. 上下文变化时在主线程回调 `onContextChange`
 ///
 /// 为什么不做成纯事件驱动（AX 通知）：Chrome 标签 URL 在不申请辅助功能权限的
 /// 前提下只能通过 AppleScript 轮询获取；Ghostty 的进程树变化本身也没有事件源，
 /// 轮询不可避免，因此用自适应降频在响应速度和开销之间折中。
 final class WindowMonitor {
-    static let shared = WindowMonitor()
+    /// 上下文变化回调（主线程调用）。由 main.swift 在装配时设置。
+    var onContextChange: ((String, WindowContext) -> Void)?
 
     // MARK: - 轮询频率
 
@@ -27,12 +29,8 @@ final class WindowMonitor {
 
     // MARK: - 上下文获取提供器
 
-    /// 支持的应用及其对应的上下文获取方式
-    private let providers: [String: WindowContextProvider] = [
-        "com.google.Chrome": ChromeContextProvider(),
-        "com.citrolabs.ego.lite": EgoLiteContextProvider(),
-        "com.mitchellh.ghostty": GhosttyContextProvider(),
-    ]
+    /// 支持的应用及其对应的上下文获取方式（可注入，便于扩展新应用）
+    private let providers: [String: WindowContextProvider]
 
     // MARK: - 状态
 
@@ -40,13 +38,24 @@ final class WindowMonitor {
     private let queue = DispatchQueue(label: "com.ime-switcher.window-monitor", qos: .utility)
     private var timer: DispatchSourceTimer?
     private var currentBundleID: String?
-    private var lastContext: String?
+    private var lastContext: WindowContext?
     /// 连续无变化的检查次数（用于自适应降频）
     private var idleCheckCount = 0
     /// 当前轮询间隔
     private var currentInterval: TimeInterval = 0
 
-    private init() {}
+    init(providers: [String: WindowContextProvider] = WindowMonitor.defaultProviders()) {
+        self.providers = providers
+    }
+
+    /// 默认支持的应用列表
+    static func defaultProviders() -> [String: WindowContextProvider] {
+        [
+            "com.google.Chrome": ChromeContextProvider(),
+            "com.citrolabs.ego.lite": EgoLiteContextProvider(),
+            "com.mitchellh.ghostty": GhosttyContextProvider(),
+        ]
+    }
 
     // MARK: - 公开接口
 
@@ -79,8 +88,8 @@ final class WindowMonitor {
 
     /// 供菜单栏读取：当前前台受支持应用的上下文（bundleID, context）。
     /// 优先用监控缓存；刚切换过来还没轮询到时同步取一次（约 100~300ms）。
-    func contextForFrontmostApp() -> (bundleID: String, context: String)? {
-        if let cached = queue.sync(execute: { () -> (String, String)? in
+    func contextForFrontmostApp() -> (bundleID: String, context: WindowContext)? {
+        if let cached = queue.sync(execute: { () -> (String, WindowContext)? in
             guard let bundleID = currentBundleID, let ctx = lastContext else { return nil }
             return (bundleID, ctx)
         }) {
@@ -118,7 +127,7 @@ final class WindowMonitor {
         lastContext = nil
     }
 
-    /// 检查当前上下文是否变化，若变化则评估窗口规则
+    /// 检查当前上下文是否变化，若变化则在主线程回调 onContextChange
     private func _checkNow(bundleID: String) {
         guard let provider = providers[bundleID] else { return }
 
@@ -146,15 +155,15 @@ final class WindowMonitor {
         let prevContext = lastContext
         lastContext = ctx
 
-        // 首次获取上下文（刚切到该应用）或上下文有变化时触发评估
+        // 首次获取上下文（刚切到该应用）或上下文有变化时触发回调
         if prevContext == nil || ctx != prevContext {
             if prevContext == nil {
-                print("🌐 [\(bundleID)] 当前上下文: \(ctx.prefix(120))")
+                print("🌐 [\(bundleID)] 当前上下文: \(ctx.matchString.prefix(120))")
             } else {
-                print("🌐 [\(bundleID)] 上下文变化: \(prevContext?.prefix(60) ?? "") → \(ctx.prefix(60))")
+                print("🌐 [\(bundleID)] 上下文变化: \(prevContext?.matchString.prefix(60) ?? "") → \(ctx.matchString.prefix(60))")
             }
-            DispatchQueue.main.async {
-                evaluateWindowRules(bundleID: bundleID, context: ctx)
+            DispatchQueue.main.async { [weak self] in
+                self?.onContextChange?(bundleID, ctx)
             }
         }
     }

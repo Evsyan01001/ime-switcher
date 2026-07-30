@@ -108,6 +108,81 @@ do {
 check((try? JSONDecoder().decode(Config.self, from: Data("{".utf8))) == nil,
       "非法 JSON 解码抛错（loadConfig 据此提示用户）")
 
+// MARK: - WindowContext 结构化上下文
+
+print("WindowContext 结构化上下文:")
+
+checkEqual(WindowContext(url: "https://zhihu.com/question/123").matchString,
+           "https://zhihu.com/question/123", "浏览器上下文序列化为裸 URL")
+
+checkEqual(WindowContext(title: "~", processes: ["zsh", "vim"]).matchString,
+           "title:~ | proc:zsh,vim", "Ghostty 上下文序列化保持旧格式（向后兼容）")
+
+checkEqual(WindowContext(title: "vim README.md").matchString,
+           "title:vim README.md", "仅标题时无 proc 段")
+
+checkEqual(WindowContext(processes: ["zsh", "claude"]).matchString,
+           "proc:zsh,claude", "仅进程时无 title 段")
+
+checkEqual(WindowContext().matchString, "", "空上下文序列化为空串")
+
+// 旧配置里的 pattern 对结构化上下文依然命中
+let ghosttyHit = matchWindowRule(rules, bundleID: "com.mitchellh.ghostty",
+                                 context: WindowContext(title: "~", processes: ["zsh", "vim"]).matchString)
+checkEqual(ghosttyHit?.inputSource, "com.apple.inputmethod.SCIM.ITABC",
+           "结构化上下文可被旧 pattern 命中")
+
+// MARK: - 输入法决策（resolveInputSource）
+
+print("输入法决策:")
+
+let resolverConfig = Config(
+    rules: ["com.microsoft.VSCode": "com.apple.keylayout.ABC"],
+    defaultInputSource: "com.apple.keylayout.US",
+    windowRules: [WindowRule(bundleID: "com.google.Chrome", pattern: "zhihu", inputSource: "com.apple.inputmethod.SCIM.ITABC")]
+)
+
+// 窗口规则 > 记忆缓存
+let d1 = resolveInputSource(config: resolverConfig, bundleID: "com.google.Chrome",
+                            cachedID: "com.apple.keylayout.ABC",
+                            context: WindowContext(url: "https://zhihu.com"))
+checkEqual(d1, InputSourceDecision(targetID: "com.apple.inputmethod.SCIM.ITABC",
+                                   reason: .windowRule(pattern: "zhihu")),
+           "窗口规则优先于记忆缓存")
+
+// context 为 nil 时不评估窗口规则 → 落到记忆缓存
+let d2 = resolveInputSource(config: resolverConfig, bundleID: "com.google.Chrome",
+                            cachedID: "com.apple.keylayout.ABC", context: nil)
+checkEqual(d2, InputSourceDecision(targetID: "com.apple.keylayout.ABC", reason: .remembered),
+           "无上下文时记忆缓存优先")
+
+// 窗口规则未命中 → 记忆缓存
+let d3 = resolveInputSource(config: resolverConfig, bundleID: "com.google.Chrome",
+                            cachedID: "com.apple.keylayout.ABC",
+                            context: WindowContext(url: "https://apple.com"))
+checkEqual(d3?.reason, .remembered, "窗口规则未命中回退到记忆缓存")
+
+// 无记忆 → 应用级规则
+let d4 = resolveInputSource(config: resolverConfig, bundleID: "com.microsoft.VSCode",
+                            cachedID: nil, context: nil)
+checkEqual(d4, InputSourceDecision(targetID: "com.apple.keylayout.ABC", reason: .appRule),
+           "应用级规则命中")
+
+// 无记忆无应用规则 → 全局默认
+let d5 = resolveInputSource(config: resolverConfig, bundleID: "com.example.Other",
+                            cachedID: nil, context: nil)
+checkEqual(d5, InputSourceDecision(targetID: "com.apple.keylayout.US", reason: .fallback),
+           "全局默认兜底")
+
+// 全部未命中 → nil（不切换）
+let noDefault = Config(rules: [:], defaultInputSource: nil)
+check(resolveInputSource(config: noDefault, bundleID: "com.example.Other",
+                         cachedID: nil, context: nil) == nil,
+      "全部未命中返回 nil")
+
+check(appHasWindowRules(resolverConfig, bundleID: "com.google.Chrome"), "appHasWindowRules 命中")
+check(!appHasWindowRules(resolverConfig, bundleID: "com.microsoft.VSCode"), "appHasWindowRules 未命中")
+
 // MARK: - 结果
 
 print("\n通过 \(passes) 项，失败 \(failures) 项")

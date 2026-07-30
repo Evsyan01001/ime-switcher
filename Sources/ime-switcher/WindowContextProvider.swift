@@ -1,42 +1,40 @@
 import Cocoa
+import IMECore
 
 // MARK: - 窗口上下文获取协议
 
 /// 获取当前窗口的上下文信息（用于匹配窗口规则）
 protocol WindowContextProvider {
-    /// 返回当前窗口的上下文字符串
-    /// - Chrome: 当前标签页 URL
+    /// 返回当前窗口的结构化上下文
+    /// - Chrome / ego lite: 当前标签页 URL
     /// - Ghostty: 窗口标题 + 进程中运行的程序
-    func currentContext() -> String?
+    func currentContext() -> WindowContext?
 }
 
 // MARK: - Chrome 实现（获取当前标签页 URL）
 
 final class ChromeContextProvider: WindowContextProvider {
-    func currentContext() -> String? {
+    func currentContext() -> WindowContext? {
         runOSAScript("tell application \"Google Chrome\" to get URL of active tab of front window")
+            .map { WindowContext(url: $0) }
     }
 }
 
 // MARK: - ego lite 实现（Chromium 内核，AppleScript 接口与 Chrome 相同）
 
 final class EgoLiteContextProvider: WindowContextProvider {
-    func currentContext() -> String? {
+    func currentContext() -> WindowContext? {
         runOSAScript("tell application \"ego lite\" to get URL of active tab of front window")
+            .map { WindowContext(url: $0) }
     }
 }
 
 // MARK: - Ghostty 实现（窗口标题 + 进程检测）
 
 /// 通过 Accessibility API 获取窗口标题，并通过进程树遍历检测当前运行的程序。
-///
-/// 返回格式: `title:阅读template | proc:zsh,claude`
-/// - `title:` 部分 = Ghostty 当前标签页标题
-/// - `proc:` 部分 = Ghostty 进程树下的所有子进程名（去重）
-///
-/// 这样窗口规则可以同时匹配标题和运行中的程序。
+/// 窗口规则可以同时匹配标题和运行中的程序（见 WindowContext.matchString）。
 final class GhosttyContextProvider: WindowContextProvider {
-    func currentContext() -> String? {
+    func currentContext() -> WindowContext? {
         guard let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == "com.mitchellh.ghostty" && $0.isActive
         }) else { return nil }
@@ -51,14 +49,7 @@ final class GhosttyContextProvider: WindowContextProvider {
 
         guard title != nil || !procs.isEmpty else { return nil }
 
-        var parts: [String] = []
-        if let t = title {
-            parts.append("title:\(t)")
-        }
-        if !procs.isEmpty {
-            parts.append("proc:\(procs.joined(separator: ","))")
-        }
-        return parts.joined(separator: " | ")
+        return WindowContext(title: title, processes: procs)
     }
 
     /// 通过 AX API 读取当前焦点窗口标题

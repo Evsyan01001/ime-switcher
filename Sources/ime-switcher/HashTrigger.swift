@@ -7,12 +7,20 @@ import IMECore
 /// 在配置的 App 中按 `#` 时自动切换到拼音（写中文注释），
 /// 按 Enter 后自动切回英文。通过 `hashTriggerApps` 配置生效范围。
 final class HashTrigger {
+    private let configStore: ConfigStore
+    private let inputSourceManager: InputSourceManager
+
     private var eventTap: CFMachPort?
     private var isInCommentMode = false
     private var appSwitchObserver: NSObjectProtocol?
 
     // kVK_Return = 36, kVK_ANSI_KeypadEnter = 76
     private let returnKeyCodes: Set<Int64> = [36, 76]
+
+    init(configStore: ConfigStore, inputSourceManager: InputSourceManager) {
+        self.configStore = configStore
+        self.inputSourceManager = inputSourceManager
+    }
 
     func start() {
         let eventMask = (1 << CGEventType.keyDown.rawValue)
@@ -68,7 +76,7 @@ final class HashTrigger {
             self?.isInCommentMode = false
         }
 
-        print("🔣 #触发拼音已就绪（\(config.hashTriggerApps?.count ?? 0) 个 App）")
+        print("🔣 #触发拼音已就绪（\(configStore.config.hashTriggerApps?.count ?? 0) 个 App）")
     }
 
     func stop() {
@@ -84,6 +92,7 @@ final class HashTrigger {
     // MARK: - 事件处理
 
     private func handle(event: CGEvent) {
+        let config = configStore.config
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
 
         // 只在配置的 App 里生效
@@ -97,7 +106,7 @@ final class HashTrigger {
                 isInCommentMode = false
                 let englishID = config.hashTriggerEnglishSource ?? "com.apple.keylayout.ABC"
                 print("🔤 注释结束，切回英文")
-                selectInputSource(id: englishID)
+                inputSourceManager.selectInputSource(id: englishID)
             }
             return
         }
@@ -111,7 +120,7 @@ final class HashTrigger {
         isInCommentMode = true
         let chineseID = config.hashTriggerChineseSource ?? "com.apple.inputmethod.SCIM.ITABC"
         print("💬 \(triggerChar) 触发注释模式 → 拼音")
-        selectInputSource(id: chineseID)
+        inputSourceManager.selectInputSource(id: chineseID)
     }
 
 }

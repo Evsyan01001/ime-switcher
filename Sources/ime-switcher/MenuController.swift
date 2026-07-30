@@ -4,9 +4,27 @@ import IMECore
 // MARK: - 菜单栏控制器
 
 class MenuController: NSObject, NSMenuDelegate {
+    private let configStore: ConfigStore
+    private let cache: AppKeyboardCache
+    private let windowMonitor: WindowMonitor
+    private let inputSourceManager: InputSourceManager
+
     private let statusItem: NSStatusItem
 
-    override init() {
+    /// 读取当前配置的便捷访问（修改请用 configStore.update）
+    private var config: Config { configStore.config }
+
+    init(
+        configStore: ConfigStore,
+        cache: AppKeyboardCache,
+        windowMonitor: WindowMonitor,
+        inputSourceManager: InputSourceManager
+    ) {
+        self.configStore = configStore
+        self.cache = cache
+        self.windowMonitor = windowMonitor
+        self.inputSourceManager = inputSourceManager
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -41,7 +59,7 @@ class MenuController: NSObject, NSMenuDelegate {
 
             let parentItem = NSMenuItem(title: "将「\(appName)」设为", action: nil, keyEquivalent: "")
             let submenu = NSMenu()
-            let sources = selectableInputSources()
+            let sources = InputSourceManager.selectableInputSources()
 
             if sources.isEmpty {
                 let noItem = NSMenuItem(title: "(无可用输入法)", action: nil, keyEquivalent: "")
@@ -69,9 +87,9 @@ class MenuController: NSObject, NSMenuDelegate {
 
         // ── 浏览器页面规则：当前网站 / 当前页面 ──
         // 前台是支持窗口规则的浏览器时，直接把当前 URL 生成 windowRules，无需手编配置
-        if let (bundleID, ctx) = WindowMonitor.shared.contextForFrontmostApp(),
-           ctx.contains("://") {
-            if let host = URL(string: ctx)?.host, !host.isEmpty {
+        if let (bundleID, ctx) = windowMonitor.contextForFrontmostApp(),
+           let url = ctx.url {
+            if let host = URL(string: url)?.host, !host.isEmpty {
                 let hostPattern = host.replacingOccurrences(of: ".", with: "\\.")
                 addPageRuleSubmenu(
                     to: menu,
@@ -84,17 +102,16 @@ class MenuController: NSObject, NSMenuDelegate {
                 to: menu,
                 title: "将当前页面设为",
                 bundleID: bundleID,
-                pattern: NSRegularExpression.escapedPattern(for: ctx)
+                pattern: NSRegularExpression.escapedPattern(for: url)
             )
         }
 
         menu.addItem(.separator())
 
         // ── Ghostty 进程规则：当前进程 ──
-        if let (bundleID, ctx) = WindowMonitor.shared.contextForFrontmostApp(),
+        if let (bundleID, ctx) = windowMonitor.contextForFrontmostApp(),
            bundleID == "com.mitchellh.ghostty" {
-            let procNames = parseGhosttyProc(from: ctx)
-            for procName in procNames {
+            for procName in ctx.processes {
                 addProcessRuleSubmenu(
                     to: menu,
                     title: "将当前进程「\(procName)」设为",
@@ -102,7 +119,7 @@ class MenuController: NSObject, NSMenuDelegate {
                     procName: procName
                 )
             }
-            if let title = parseGhosttyTitle(from: ctx) {
+            if let title = ctx.title {
                 addPageRuleSubmenu(
                     to: menu,
                     title: "将当前标签页设为",
@@ -150,7 +167,7 @@ class MenuController: NSObject, NSMenuDelegate {
 
         // ── 输入法记忆 ──
         var addedCacheItems = false
-        if AppKeyboardCache.shared.hasCacheForFrontmostApp {
+        if cache.hasCacheForFrontmostApp {
             let forgetItem = NSMenuItem(
                 title: "忘记这个 App 的偏好",
                 action: #selector(forgetAppPreference),
@@ -160,7 +177,7 @@ class MenuController: NSObject, NSMenuDelegate {
             menu.addItem(forgetItem)
             addedCacheItems = true
         }
-        if !AppKeyboardCache.shared.isEmpty {
+        if !cache.isEmpty {
             let clearAllItem = NSMenuItem(
                 title: "清除全部记忆",
                 action: #selector(clearAllPreferences),
@@ -198,7 +215,7 @@ class MenuController: NSObject, NSMenuDelegate {
     private func addPageRuleSubmenu(to menu: NSMenu, title: String, bundleID: String, pattern: String) {
         let parentItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let submenu = NSMenu()
-        for (id, name) in selectableInputSources() {
+        for (id, name) in InputSourceManager.selectableInputSources() {
             let item = NSMenuItem(title: name, action: #selector(setWindowRuleForCurrentPage(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = (bundleID, pattern, id)
@@ -216,22 +233,22 @@ class MenuController: NSObject, NSMenuDelegate {
     @objc private func setWindowRuleForCurrentPage(_ sender: NSMenuItem) {
         guard let (bundleID, pattern, imeID) = sender.representedObject as? (String, String, String) else { return }
 
-        var rules = config.windowRules ?? []
-        // 同 App 同 pattern 的旧规则替换掉，避免重复
-        rules.removeAll { $0.bundleID == bundleID && $0.pattern == pattern }
-        // 插到最前：菜单设置的精确规则优先于配置文件里的宽泛规则
-        rules.insert(WindowRule(bundleID: bundleID, pattern: pattern, inputSource: imeID), at: 0)
-        config.windowRules = rules
-        saveConfig(config)
-        selectInputSource(id: imeID)
+        configStore.update { config in
+            var rules = config.windowRules ?? []
+            // 同 App 同 pattern 的旧规则替换掉，避免重复
+            rules.removeAll { $0.bundleID == bundleID && $0.pattern == pattern }
+            // 插到最前：菜单设置的精确规则优先于配置文件里的宽泛规则
+            rules.insert(WindowRule(bundleID: bundleID, pattern: pattern, inputSource: imeID), at: 0)
+            config.windowRules = rules
+        }
+        inputSourceManager.selectInputSource(id: imeID)
         print("🌐 已添加窗口规则: 「\(pattern)」→ \(imeID)")
     }
 
     @objc private func setRuleForCurrentApp(_ sender: NSMenuItem) {
         guard let (bundleID, imeID) = sender.representedObject as? (String, String) else { return }
-        config.rules[bundleID] = imeID
-        saveConfig(config)
-        selectInputSource(id: imeID)
+        configStore.update { $0.rules[bundleID] = imeID }
+        inputSourceManager.selectInputSource(id: imeID)
     }
 
     // MARK: - Ghostty 进程规则
@@ -241,7 +258,7 @@ class MenuController: NSObject, NSMenuDelegate {
         let parentItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         let pattern = ghosttyProcPattern(for: procName)
-        for (id, name) in selectableInputSources() {
+        for (id, name) in InputSourceManager.selectableInputSources() {
             let item = NSMenuItem(title: name, action: #selector(setWindowRuleForCurrentProcess(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = (bundleID, procName, id)
@@ -261,57 +278,34 @@ class MenuController: NSObject, NSMenuDelegate {
 
         let pattern = ghosttyProcPattern(for: procName)
 
-        var rules = config.windowRules ?? []
-        // 同 App 同 pattern 的旧规则替换掉，避免重复
-        rules.removeAll { $0.bundleID == bundleID && $0.pattern == pattern }
-        // 插到最前：菜单设置的精确规则优先于配置文件里的宽泛规则
-        rules.insert(WindowRule(bundleID: bundleID, pattern: pattern, inputSource: imeID), at: 0)
-        config.windowRules = rules
-        saveConfig(config)
-        selectInputSource(id: imeID)
+        configStore.update { config in
+            var rules = config.windowRules ?? []
+            // 同 App 同 pattern 的旧规则替换掉，避免重复
+            rules.removeAll { $0.bundleID == bundleID && $0.pattern == pattern }
+            // 插到最前：菜单设置的精确规则优先于配置文件里的宽泛规则
+            rules.insert(WindowRule(bundleID: bundleID, pattern: pattern, inputSource: imeID), at: 0)
+            config.windowRules = rules
+        }
+        inputSourceManager.selectInputSource(id: imeID)
         print("🌐 已添加 Ghostty 进程规则: 「\(procName)」→ \(imeID)")
     }
 
     /// 生成 Ghostty 进程匹配模式：匹配 proc: 段中独立的进程名
     private func ghosttyProcPattern(for procName: String) -> String {
-        // 格式: "title:... | proc:zsh,vim,node"
+        // 格式: "title:... | proc:zsh,vim,node"（见 WindowContext.matchString）
         // 用 \b 词边界确保不会部分匹配（如 "vim" 不会匹配 "vimproc"）
         let escaped = NSRegularExpression.escapedPattern(for: procName)
         return "proc:.*\\b\(escaped)\\b.*"
     }
 
-    /// 从 Ghostty 上下文解析出进程名列表
-    private func parseGhosttyProc(from context: String) -> [String] {
-        guard let range = context.range(of: "proc:") else { return [] }
-        let afterProc = context[range.upperBound...]
-        return afterProc.split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespaces)
-        }.filter { !$0.isEmpty }
-    }
-
-    /// 从 Ghostty 上下文解析出窗口标题
-    private func parseGhosttyTitle(from context: String) -> String? {
-        guard context.hasPrefix("title:") else { return nil }
-        let afterPrefix = context.dropFirst(6) // "title:" length
-        if let pipeRange = afterPrefix.range(of: " | ") {
-            return String(afterPrefix[..<pipeRange.lowerBound]).trimmingCharacters(in: .whitespaces)
-        }
-        return String(afterPrefix).trimmingCharacters(in: .whitespaces)
-    }
-
     @objc private func reloadConfigAction() {
-        // 解析失败时保留当前配置（loadConfig 已弹窗提示原因）
-        guard let newConfig = loadConfig() else {
-            print("🔄 配置解析失败，保留当前配置")
-            return
-        }
-        config = newConfig
-        print("🔄 配置已重新加载")
+        // 解析失败时保留当前配置（ConfigStore 已弹窗提示原因）
+        configStore.reload()
     }
 
     @objc private func forgetAppPreference() {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
-        AppKeyboardCache.shared.remove(bundleID: bundleID)
+        cache.remove(bundleID: bundleID)
     }
 
     @objc private func clearAllPreferences() {
@@ -322,7 +316,7 @@ class MenuController: NSObject, NSMenuDelegate {
         alert.addButton(withTitle: "清除")
         alert.addButton(withTitle: "取消")
         if alert.runModal() == .alertFirstButtonReturn {
-            AppKeyboardCache.shared.removeAll()
+            cache.removeAll()
         }
     }
 
@@ -345,29 +339,28 @@ class MenuController: NSObject, NSMenuDelegate {
 
         let trimmed = textField.stringValue.trimmingCharacters(in: .whitespaces)
         guard let first = trimmed.first else { return }
-        config.hashTriggerKey = String(first)
-        saveConfig(config)
+        configStore.update { $0.hashTriggerKey = String(first) }
         print("🔤 触发键已设为: \(String(first))")
     }
 
     @objc private func toggleHashTrigger() {
         guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return }
 
-        var apps = config.hashTriggerApps ?? []
-        if let idx = apps.firstIndex(of: bundleID) {
-            apps.remove(at: idx)
-            print("💬 注释模式已关闭：\(bundleID)")
-        } else {
-            apps.append(bundleID)
-            print("💬 注释模式已开启：\(bundleID)")
+        configStore.update { config in
+            var apps = config.hashTriggerApps ?? []
+            if let idx = apps.firstIndex(of: bundleID) {
+                apps.remove(at: idx)
+                print("💬 注释模式已关闭：\(bundleID)")
+            } else {
+                apps.append(bundleID)
+                print("💬 注释模式已开启：\(bundleID)")
+            }
+            config.hashTriggerApps = apps
         }
-        config.hashTriggerApps = apps
-        saveConfig(config)
     }
 
     @objc private func editConfig() {
-        let path = configPath()
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        NSWorkspace.shared.open(URL(fileURLWithPath: ConfigStore.path))
     }
 
     @objc private func quitApp() {
